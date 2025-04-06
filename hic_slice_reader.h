@@ -28,6 +28,9 @@ public:
     // Read records for specific chromosome pair
     std::vector<SliceContactRecord> readRecordsForChromosomePair(const std::string& chr1, const std::string& chr2);
 
+    // Add this new method
+    gzFile getFile() { return file; }
+
 private:
     void readHeader();
     std::string getChromosomeFromKey(int16_t key) const;
