@@ -20,8 +20,8 @@ struct BinRegion {
 
 // Structure to hold possible bin positions for quick filtering
 struct RegionsOfInterest {
-    std::unordered_map<std::string, std::set<int32_t>> rowIndices;  // chrom -> set of binX
-    std::unordered_map<std::string, std::set<int32_t>> colIndices;  // chrom -> set of binY
+    std::unordered_map<std::string, std::unordered_set<int32_t>> rowIndices;  // chrom -> set of binX
+    std::unordered_map<std::string, std::unordered_set<int32_t>> colIndices;  // chrom -> set of binY
     int32_t resolution;
     int32_t window;
     bool isInter;  // true for inter-chromosomal, false for intra-chromosomal
@@ -30,6 +30,12 @@ struct RegionsOfInterest {
                      int32_t res, int32_t win,
                      bool inter) 
         : resolution(res), window(win), isInter(inter) {
+        // Pre-reserve space for better performance
+        for (const auto& entry : bedpe_entries) {
+            rowIndices[entry.chrom1].reserve(1000000);  // Reserve space for ~1M bins
+            colIndices[entry.chrom2].reserve(1000000);  // Reserve space for ~1M bins
+        }
+
         for (const auto& entry : bedpe_entries) {
             // Convert BEDPE coordinates to bin positions
             int32_t bin1Start = entry.start1 / resolution;
@@ -211,6 +217,7 @@ struct LoopIndex {
         int32_t bin_group = binX / BIN_GROUP_SIZE;
         
         std::vector<const BedpeEntry*> nearby_loops;
+        nearby_loops.reserve(10);  // Pre-allocate space for 1M loops
         
         // Check the bin group and adjacent groups
         for (int32_t i = -1; i <= 1; i++) {
