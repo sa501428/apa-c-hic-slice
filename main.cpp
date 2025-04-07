@@ -56,8 +56,9 @@ int main(int argc, char* argv[]) {
         BedpeBuilder builder(forward_bed, reverse_bed, min_dist, max_dist, makeIntra, makeInter);
         auto bedpe_entries = builder.buildBedpe();
 
-        float totalCount = processSliceFile(slice_file, bedpe_entries);
-        std::cout << "Total contact count in BEDPE regions: " << totalCount << std::endl;
+        APAMatrix apaMatrix = processSliceFile(slice_file, bedpe_entries, output_file);
+        std::cout << "APA matrix saved to: " << output_file << std::endl;
+        std::cout << "Center pixel value: " << apaMatrix.matrix[apaMatrix.width/2][apaMatrix.width/2] << std::endl;
         
     } catch (const std::exception& e) {
         std::cerr << "Error: " << e.what() << std::endl;

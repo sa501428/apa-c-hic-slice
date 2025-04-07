@@ -4,10 +4,30 @@
 #include <cstring>
 #include <cmath>
 #include <map>
+#include <fstream>
+#include <iomanip>
 
+void APAMatrix::save(const std::string& filename) const {
+    std::ofstream out(filename);
+    if (!out) {
+        throw std::runtime_error("Cannot open output file: " + filename);
+    }
 
-float processSliceFile(const std::string& slice_file, 
-                      const std::vector<BedpeEntry>& bedpe_entries) {
+    // Write as space-separated values with high precision
+    out << std::fixed << std::setprecision(6);
+    for (int i = 0; i < width; i++) {
+        for (int j = 0; j < width; j++) {
+            if (j > 0) out << " ";
+            out << matrix[i][j];
+        }
+        out << "\n";
+    }
+}
+
+APAMatrix processSliceFile(const std::string& slice_file, 
+                         const std::vector<BedpeEntry>& bedpe_entries,
+                         const std::string& output_file,
+                         int window_size) {
     // Open slice file
     gzFile file = gzopen(slice_file.c_str(), "rb");
     if (!file) {
@@ -54,24 +74,13 @@ float processSliceFile(const std::string& slice_file,
             chromosomeKeyToName[key] = chromosomeName;
         }
 
-        // Create map for faster BEDPE lookup
-        using RegionPair = std::pair<BinRegion, BinRegion>;
-        std::map<std::pair<std::string, std::string>, std::vector<RegionPair>> regionMap;
-        
-        // Convert BEDPE entries to bin coordinates and store in both orientations
-        for (const auto& entry : bedpe_entries) {
-            BinRegion region1{entry.start1 / resolution, (entry.end1 + resolution - 1) / resolution};
-            BinRegion region2{entry.start2 / resolution, (entry.end2 + resolution - 1) / resolution};
-            
-            // Store in both chromosome orientations since Hi-C contacts can be in either order
-            regionMap[{entry.chrom1, entry.chrom2}].push_back({region1, region2});
-            if (entry.chrom1 != entry.chrom2) {
-                regionMap[{entry.chrom2, entry.chrom1}].push_back({region2, region1});
-            }
-        }
+        // Create regions of interest for quick filtering
+        RegionsOfInterest roi(bedpe_entries, resolution, window_size);
+
+        // Create APA matrix for accumulating values
+        APAMatrix apaMatrix(window_size * 2 + 1);  // center +/- window_size
 
         // Process contact records
-        float totalCount = 0;
         struct {
             int16_t chr1Key;
             int32_t binX;
@@ -88,20 +97,42 @@ float processSliceFile(const std::string& slice_file,
             std::string chr1 = chromosomeKeyToName[record.chr1Key];
             std::string chr2 = chromosomeKeyToName[record.chr2Key];
             
-            auto it = regionMap.find({chr1, chr2});
-            if (it != regionMap.end()) {
-                for (const auto& region : it->second) {
-                    if (record.binX >= region.first.start && record.binX < region.first.end &&
-                        record.binY >= region.second.start && record.binY < region.second.end) {
-                        totalCount += record.value;
-                        break;  // Count each contact only once
+            // Quick filter - only process if bins are in regions of interest
+            if (roi.probablyContainsRecord(chr1, chr2, record.binX, record.binY)) {
+                // Check each loop region
+                for (const auto& loop : bedpe_entries) {
+                    if (loop.chrom1 == chr1 && loop.chrom2 == chr2) {
+                        // Convert BEDPE coordinates to bin positions
+                        int32_t bin1Start = loop.start1 / resolution;
+                        int32_t bin1End = (loop.end1 / resolution) + 1;  // +1 to include the full range
+                        int32_t bin2Start = loop.start2 / resolution;
+                        int32_t bin2End = (loop.end2 / resolution) + 1;  // +1 to include the full range
+                        
+                        // Calculate center bin positions
+                        int32_t loopCenterX = (bin1Start + bin1End) / 2;
+                        int32_t loopCenterY = (bin2Start + bin2End) / 2;
+                        
+                        // Calculate upper-left corner of window
+                        int32_t windowStartX = loopCenterX - window_size;
+                        int32_t windowStartY = loopCenterY - window_size;
+                        
+                        // Calculate relative position from upper-left corner
+                        int relX = record.binX - windowStartX;
+                        int relY = record.binY - windowStartY;
+                        
+                        // Add to matrix if within bounds
+                        apaMatrix.add(relX, relY, record.value);
                     }
                 }
             }
         }
 
         gzclose(file);
-        return totalCount;
+        
+        // Save the matrix to file
+        apaMatrix.save(output_file);
+        
+        return apaMatrix;
 
     } catch (...) {
         gzclose(file);
