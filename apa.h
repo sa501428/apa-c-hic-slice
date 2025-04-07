@@ -136,15 +136,14 @@ struct CoverageVectors {
     void add(const std::string& chrom, int32_t bin, float value) {
         if (bin >= MAX_SIZE) {
             std::cerr << "Warning: bin " << bin << " is beyond max size " << MAX_SIZE << std::endl;
-            return;  // Silently ignore bins beyond max size
+            return;
         }
         
         auto& vec = vectors[chrom];
         if (vec.empty()) {
-            // Pre-allocate with reasonable size on first use
             vec.resize(INITIAL_SIZE / resolution, 0.0f);
         }
-        if (bin >= vec.size()) {
+        if (static_cast<size_t>(bin) >= vec.size()) {
             size_t new_size = std::min(
                 static_cast<size_t>(MAX_SIZE),
                 std::max(vec.size() * 2, static_cast<size_t>(bin * 2))
@@ -154,15 +153,14 @@ struct CoverageVectors {
         vec[bin] += value;
     }
 
-    // Get sums for a window around a bin position
     void addLocalSums(std::vector<float>& sums, const std::string& chrom, 
                      int32_t binStart) const {
         auto it = vectors.find(chrom);
         if (it != vectors.end()) {
             const auto& vec = it->second;
-            for (int i = 0; i < sums.size(); i++) {
-                int32_t bin = binStart + i;
-                if (bin >= 0 && bin < vec.size()) {
+            for (size_t i = 0; i < sums.size(); i++) {
+                int32_t bin = binStart + static_cast<int32_t>(i);
+                if (bin >= 0 && static_cast<size_t>(bin) < vec.size()) {
                     sums[i] += vec[bin];
                 }
             }
