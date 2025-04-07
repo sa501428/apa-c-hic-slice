@@ -84,7 +84,7 @@ struct APAMatrix {
                 count++;
             }
         }
-        return count > 0 ? sum / count : 0.0f;
+        return count > 0 ? sum / count : 1.0f;  // Return 1.0 instead of 0 to prevent division by zero
     }
 
     // Scale vector by its average
@@ -107,6 +107,7 @@ struct APAMatrix {
                 if (normVal > 0.0f) {
                     normalized[r][c] = matrix[r][c] / normVal;
                 }
+                // If normVal is 0, leave normalized[r][c] as 0
             }
         }
         
@@ -120,30 +121,39 @@ struct APAMatrix {
 struct CoverageVectors {
     std::unordered_map<std::string, std::vector<float>> vectors;  // chrom -> coverage vector
     static const int32_t INITIAL_SIZE = 20000000;  // 20Mb
+    static const int32_t MAX_SIZE = 25000000;      // Absolute maximum size
     int32_t resolution;
     
     CoverageVectors(int32_t res) : resolution(res) {}
     
     void add(const std::string& chrom, int32_t bin, float value) {
+        if (bin >= MAX_SIZE) {
+            std::cerr << "Warning: bin " << bin << " is beyond max size " << MAX_SIZE << std::endl;
+            return;  // Silently ignore bins beyond max size
+        }
+        
         auto& vec = vectors[chrom];
         if (vec.empty()) {
             // Pre-allocate with reasonable size on first use
             vec.resize(INITIAL_SIZE / resolution, 0.0f);
         }
         if (bin >= vec.size()) {
-            // If we need more space, double the size
-            vec.resize(std::max(vec.size() * 2, static_cast<size_t>(bin * 2)), 0.0f);
+            size_t new_size = std::min(
+                static_cast<size_t>(MAX_SIZE),
+                std::max(vec.size() * 2, static_cast<size_t>(bin * 2))
+            );
+            vec.resize(new_size, 0.0f);
         }
         vec[bin] += value;
     }
 
     // Get sums for a window around a bin position
     void addLocalSums(std::vector<float>& sums, const std::string& chrom, 
-                     int32_t binStart, int32_t windowSize) const {
+                     int32_t binStart) const {
         auto it = vectors.find(chrom);
         if (it != vectors.end()) {
             const auto& vec = it->second;
-            for (int i = 0; i < windowSize * 2 + 1; i++) {
+            for (int i = 0; i < sums.size(); i++) {
                 int32_t bin = binStart + i;
                 if (bin >= 0 && bin < vec.size()) {
                     sums[i] += vec[bin];

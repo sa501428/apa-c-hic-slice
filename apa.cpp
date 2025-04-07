@@ -164,12 +164,12 @@ APAMatrix processSliceFile(const std::string& slice_file,
         // Calculate row and column sums from coverage vectors
         for (const auto& loop : bedpe_entries) {
             // Convert to bin coordinates
-            int32_t bin1Start = (loop.start1 / resolution + loop.end1 / resolution) / 2 - window_size;
-            int32_t bin2Start = (loop.start2 / resolution + loop.end2 / resolution) / 2 - window_size;
+            int32_t bin1Start = ((loop.start1 + loop.end1) / 2) / resolution - window_size;
+            int32_t bin2Start = ((loop.start2 + loop.end2) / 2) / resolution - window_size;
             
             // Add local sums from coverage vectors
-            coverage.addLocalSums(rowSums, loop.chrom1, bin1Start, window_size);
-            coverage.addLocalSums(colSums, loop.chrom2, bin2Start, window_size);
+            coverage.addLocalSums(rowSums, loop.chrom1, bin1Start);
+            coverage.addLocalSums(colSums, loop.chrom2, bin2Start);
         }
 
         // Scale sums by their averages
