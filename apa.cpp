@@ -6,6 +6,7 @@
 #include <map>
 #include <fstream>
 #include <iomanip>
+#include <algorithm>
 
 void APAMatrix::save(const std::string& filename) const {
     std::ofstream out(filename);

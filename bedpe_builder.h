@@ -4,6 +4,10 @@
 #include <string>
 #include <vector>
 #include <map>
+#include <set>
+#include <algorithm>
+#include <cstdint>  // For int32_t
+#include <cctype>   // For isdigit
 
 struct BedEntry {
     std::string chrom;

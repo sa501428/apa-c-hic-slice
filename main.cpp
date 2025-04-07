@@ -3,6 +3,8 @@
 #include <iostream>
 #include <string>
 #include <fstream>
+#include <stdexcept>
+#include <cstdint>
 
 // APA4 Aggregate Peak Analysis
 // first generate a bedpe file of all potential loop locations from bed files

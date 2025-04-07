@@ -4,6 +4,7 @@
 #include <iostream>
 #include <algorithm>
 #include <stdexcept>
+#include <cctype>
 
 BedpeBuilder::BedpeBuilder(const std::string& forward_bed, 
                           const std::string& reverse_bed,

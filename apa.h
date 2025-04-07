@@ -7,6 +7,9 @@
 #include <set>
 #include <unordered_map>
 #include <stdexcept>
+#include <cstdint>  // For int32_t
+#include <iostream>
+#include <algorithm>
 
 // Structure to hold binned regions for faster lookup
 struct BinRegion {
