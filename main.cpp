@@ -81,10 +81,12 @@ int main(int argc, char* argv[]) {
             }
         }
         
-        // Generate BEDPE entries
+        std::cout << "Loading BED files and generating BEDPE entries..." << std::endl;
         BedpeBuilder builder(forward_bed, reverse_bed, min_dist, max_dist, isInter);
         auto bedpe_entries = builder.buildBedpe();
+        std::cout << "Generated " << bedpe_entries.size() << " BEDPE entries" << std::endl;
 
+        std::cout << "Processing slice file: " << slice_file << std::endl;
         APAMatrix apaMatrix = processSliceFile(slice_file, bedpe_entries, output_file, 
                                              window_size, isInter, min_dist, max_dist);
         std::cout << "APA matrix saved to: " << output_file << std::endl;

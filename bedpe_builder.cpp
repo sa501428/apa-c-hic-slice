@@ -133,12 +133,15 @@ std::vector<BedpeEntry> BedpeBuilder::generateInterChromosomal(
 }
 
 std::vector<BedpeEntry> BedpeBuilder::buildBedpe() {
+    std::cout << "Loading forward BED file: " << forward_bed_file << std::endl;
     auto forward_data = loadBedFile(forward_bed_file);
+    std::cout << "Loading reverse BED file: " << reverse_bed_file << std::endl;
     auto reverse_data = loadBedFile(reverse_bed_file);
     
     std::vector<BedpeEntry> all_results;
     
     if (isInter) {
+        std::cout << "Generating inter-chromosomal BEDPE entries..." << std::endl;
         for (const auto& forward_pair : forward_data) {
             for (const auto& reverse_pair : reverse_data) {
                 if (forward_pair.first != reverse_pair.first) {
@@ -151,6 +154,7 @@ std::vector<BedpeEntry> BedpeBuilder::buildBedpe() {
             }
         }
     } else {
+        std::cout << "Generating intra-chromosomal BEDPE entries..." << std::endl;
         for (const auto& forward_pair : forward_data) {
             const std::string& chrom = forward_pair.first;
             if (reverse_data.count(chrom) > 0) {
@@ -162,13 +166,12 @@ std::vector<BedpeEntry> BedpeBuilder::buildBedpe() {
         }
     }
     
-    // Sort results in ascending order
+    std::cout << "Sorting and removing duplicates..." << std::endl;
     std::sort(all_results.begin(), all_results.end());
-
-    // Remove duplicates
     auto last = std::unique(all_results.begin(), all_results.end());
     all_results.erase(last, all_results.end());
 
+    std::cout << "Generated " << all_results.size() << " unique BEDPE entries" << std::endl;
     return all_results;
 }
 

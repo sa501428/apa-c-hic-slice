@@ -7,6 +7,7 @@
 #include <fstream>
 #include <iomanip>
 #include <algorithm>
+#include <iostream>
 
 void APAMatrix::save(const std::string& filename) const {
     std::ofstream out(filename);
@@ -32,6 +33,7 @@ APAMatrix processSliceFile(const std::string& slice_file,
                          bool isInter,
                          long min_genome_dist,
                          long max_genome_dist) {
+    std::cout << "Opening slice file..." << std::endl;
     if (window_size <= 0) {
         throw std::runtime_error("Window size must be positive");
     }
@@ -43,6 +45,7 @@ APAMatrix processSliceFile(const std::string& slice_file,
     }
 
     try {
+        std::cout << "Reading header..." << std::endl;
         // Read and verify magic string
         char magic[8];
         if (gzread(file, magic, 8) != 8 || strncmp(magic, "HICSLICE", 8) != 0) {
@@ -68,6 +71,9 @@ APAMatrix processSliceFile(const std::string& slice_file,
         if (numChromosomes <= 0) {
             throw std::runtime_error("Invalid number of chromosomes in slice file");
         }
+
+        std::cout << "Resolution: " << resolution << " bp" << std::endl;
+        std::cout << "Number of chromosomes: " << numChromosomes << std::endl;
 
         std::map<int16_t, std::string> chromosomeKeyToName;
         for (int i = 0; i < numChromosomes; i++) {
@@ -104,7 +110,15 @@ APAMatrix processSliceFile(const std::string& slice_file,
             float value;
         } record;
 
+        std::cout << "Processing contacts..." << std::endl;
+        int64_t contact_count = 0;
+
         while (gzread(file, &record, sizeof(record)) == sizeof(record)) {
+            contact_count++;
+            if ((contact_count % 1000000) == 0) {
+                std::cout << "." << std::flush;
+            }
+
             if (std::isnan(record.value) || std::isinf(record.value) || record.value <= 0) {
                 continue;
             }
@@ -167,9 +181,11 @@ APAMatrix processSliceFile(const std::string& slice_file,
                 }
             }
         }
+        std::cout << std::endl;
 
-        gzclose(file);
+        std::cout << "Finished processing " << contact_count << " contacts" << std::endl;
         
+        std::cout << "Calculating coverage normalization..." << std::endl;
         // After processing all contacts, normalize the matrix
         std::vector<float> rowSums(apaMatrix.width, 0.0f);
         std::vector<float> colSums(apaMatrix.width, 0.0f);
@@ -192,12 +208,14 @@ APAMatrix processSliceFile(const std::string& slice_file,
         // Normalize the matrix
         apaMatrix.normalize(rowSums, colSums);
         
-        // Save the matrix to file
+        std::cout << "Normalizing matrix..." << std::endl;
+        std::cout << "Saving matrix to: " << output_file << std::endl;
         apaMatrix.save(output_file);
         
         return apaMatrix;
 
-    } catch (...) {
+    } catch (const std::exception& e) {
+        std::cerr << "Error processing slice file: " << e.what() << std::endl;
         gzclose(file);
         throw;
     }
