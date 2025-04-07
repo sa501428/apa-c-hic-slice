@@ -6,6 +6,7 @@
 #include <vector>
 #include <set>
 #include <unordered_map>
+#include <unordered_set>
 #include <stdexcept>
 #include <cstdint>  // For int32_t
 #include <iostream>
