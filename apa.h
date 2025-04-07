@@ -19,10 +19,12 @@ struct RegionsOfInterest {
     std::unordered_map<std::string, std::set<int32_t>> colIndices;  // chrom -> set of binY
     int32_t resolution;
     int32_t window;
+    bool isInter;  // true for inter-chromosomal, false for intra-chromosomal
 
     RegionsOfInterest(const std::vector<BedpeEntry>& bedpe_entries, 
-                     int32_t res, int32_t win) 
-        : resolution(res), window(win) {
+                     int32_t res, int32_t win,
+                     bool inter) 
+        : resolution(res), window(win), isInter(inter) {
         for (const auto& entry : bedpe_entries) {
             // Convert BEDPE coordinates to bin positions
             int32_t bin1Start = entry.start1 / resolution;
@@ -46,6 +48,10 @@ struct RegionsOfInterest {
 
     bool probablyContainsRecord(const std::string& chr1, const std::string& chr2,
                               int32_t binX, int32_t binY) const {
+        // Quick filter for inter/intra
+        if (isInter && chr1 == chr2) return false;
+        if (!isInter && chr1 != chr2) return false;
+        
         auto rowIt = rowIndices.find(chr1);
         auto colIt = colIndices.find(chr2);
         return rowIt != rowIndices.end() && colIt != colIndices.end() &&
@@ -75,6 +81,7 @@ struct APAMatrix {
 APAMatrix processSliceFile(const std::string& slice_file, 
                          const std::vector<BedpeEntry>& bedpe_entries,
                          const std::string& output_file,
-                         int window_size = 10);  // window size in bins
+                         int window_size = 10,
+                         bool isInter = false);  // Add isInter parameter
 
 #endif 

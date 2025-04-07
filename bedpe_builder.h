@@ -34,8 +34,7 @@ public:
                  const std::string& reverse_bed,
                  long min_dist,
                  long max_dist,
-                 bool make_intra = true,
-                 bool make_inter = false);
+                 bool isInter);  // true for inter-chromosomal, false for intra-chromosomal
 
     std::vector<BedpeEntry> buildBedpe();
 
@@ -44,8 +43,7 @@ private:
     std::string reverse_bed_file;
     long min_genome_dist;
     long max_genome_dist;
-    bool make_intra;
-    bool make_inter;
+    bool isInter;
 
     std::map<std::string, std::vector<BedEntry>> loadBedFile(const std::string& filename);
     std::vector<BedpeEntry> generateIntraChromosomal(const std::string& chrom,

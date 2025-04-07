@@ -9,12 +9,11 @@
 // add up the total counts for all reads that overlap a loop
 // output the total counts
 void printUsage() {
-    std::cout << "Usage: apa4 [-both-intra-inter|-only-inter] <forward.bed> <reverse.bed> "
+    std::cout << "Usage: apa4 [-only-inter] <forward.bed> <reverse.bed> "
               << "<min_genome_dist> <max_genome_dist> <hic_slice_file> <output.txt>\n"
               << "\tCreate potential loop locations using the anchors\n"
-              << "\t\tDefault is intra-chromosomal only features\n"
-              << "\t\tUse -only-inter for inter-chromosomal features only\n"
-              << "\t\tUse -both-intra-inter for both types of features\n"
+              << "\t\tDefault is intra-chromosomal features\n"
+              << "\t\tUse -only-inter for inter-chromosomal features\n"
               << "\t\t<hic_slice_file> is the path to the HiC slice file\n"
               << "\t\t<output.txt> is the path to the output file\n";
 }
@@ -22,21 +21,15 @@ void printUsage() {
 int main(int argc, char* argv[]) {
     try {
         int argOffset = 1;
-        bool makeIntra = true;
-        bool makeInter = false;
+        bool isInter = false;
         
-        if (argc < 7) {  // Need one more arg for output file
+        if (argc < 6) {
             printUsage();
             return 1;
         }
         
-        if (std::string(argv[1]) == "-both-intra-inter") {
-            makeIntra = true;
-            makeInter = true;
-            argOffset++;
-        } else if (std::string(argv[1]) == "-only-inter") {
-            makeIntra = false;
-            makeInter = true;
+        if (std::string(argv[1]) == "-only-inter") {
+            isInter = true;
             argOffset++;
         }
         
@@ -53,10 +46,10 @@ int main(int argc, char* argv[]) {
         std::string output_file = argv[argOffset + 5];
         
         // Generate BEDPE entries
-        BedpeBuilder builder(forward_bed, reverse_bed, min_dist, max_dist, makeIntra, makeInter);
+        BedpeBuilder builder(forward_bed, reverse_bed, min_dist, max_dist, isInter);
         auto bedpe_entries = builder.buildBedpe();
 
-        APAMatrix apaMatrix = processSliceFile(slice_file, bedpe_entries, output_file);
+        APAMatrix apaMatrix = processSliceFile(slice_file, bedpe_entries, output_file, 10, isInter);
         std::cout << "APA matrix saved to: " << output_file << std::endl;
         std::cout << "Center pixel value: " << apaMatrix.matrix[apaMatrix.width/2][apaMatrix.width/2] << std::endl;
         

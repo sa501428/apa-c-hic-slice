@@ -27,7 +27,8 @@ void APAMatrix::save(const std::string& filename) const {
 APAMatrix processSliceFile(const std::string& slice_file, 
                          const std::vector<BedpeEntry>& bedpe_entries,
                          const std::string& output_file,
-                         int window_size) {
+                         int window_size,
+                         bool isInter) {
     // Open slice file
     gzFile file = gzopen(slice_file.c_str(), "rb");
     if (!file) {
@@ -75,7 +76,7 @@ APAMatrix processSliceFile(const std::string& slice_file,
         }
 
         // Create regions of interest for quick filtering
-        RegionsOfInterest roi(bedpe_entries, resolution, window_size);
+        RegionsOfInterest roi(bedpe_entries, resolution, window_size, isInter);
 
         // Create APA matrix for accumulating values
         APAMatrix apaMatrix(window_size * 2 + 1);  // center +/- window_size
@@ -97,6 +98,10 @@ APAMatrix processSliceFile(const std::string& slice_file,
             std::string chr1 = chromosomeKeyToName[record.chr1Key];
             std::string chr2 = chromosomeKeyToName[record.chr2Key];
             
+            // Quick filter for inter/intra chromosomal contacts
+            if (isInter && chr1 == chr2) continue;
+            if (!isInter && chr1 != chr2) continue;
+
             // Quick filter - only process if bins are in regions of interest
             if (roi.probablyContainsRecord(chr1, chr2, record.binX, record.binY)) {
                 // Check each loop region

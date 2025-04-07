@@ -9,14 +9,12 @@ BedpeBuilder::BedpeBuilder(const std::string& forward_bed,
                           const std::string& reverse_bed,
                           long min_dist,
                           long max_dist,
-                          bool make_intra,
-                          bool make_inter)
+                          bool isInter)
     : forward_bed_file(forward_bed)
     , reverse_bed_file(reverse_bed)
     , min_genome_dist(min_dist)
     , max_genome_dist(max_dist)
-    , make_intra(make_intra)
-    , make_inter(make_inter) {}
+    , isInter(isInter) {}
 
 std::map<std::string, std::vector<BedEntry>> BedpeBuilder::loadBedFile(const std::string& filename) {
     std::map<std::string, std::vector<BedEntry>> bed_data;
@@ -139,19 +137,7 @@ std::vector<BedpeEntry> BedpeBuilder::buildBedpe() {
     
     std::vector<BedpeEntry> all_results;
     
-    if (make_intra) {
-        for (const auto& forward_pair : forward_data) {
-            const std::string& chrom = forward_pair.first;
-            if (reverse_data.count(chrom) > 0) {
-                auto results = generateIntraChromosomal(chrom, 
-                                                      forward_pair.second,
-                                                      reverse_data[chrom]);
-                all_results.insert(all_results.end(), results.begin(), results.end());
-            }
-        }
-    }
-    
-    if (make_inter) {
+    if (isInter) {
         for (const auto& forward_pair : forward_data) {
             for (const auto& reverse_pair : reverse_data) {
                 if (forward_pair.first != reverse_pair.first) {
@@ -161,6 +147,16 @@ std::vector<BedpeEntry> BedpeBuilder::buildBedpe() {
                                                           reverse_pair.second);
                     all_results.insert(all_results.end(), results.begin(), results.end());
                 }
+            }
+        }
+    } else {
+        for (const auto& forward_pair : forward_data) {
+            const std::string& chrom = forward_pair.first;
+            if (reverse_data.count(chrom) > 0) {
+                auto results = generateIntraChromosomal(chrom, 
+                                                      forward_pair.second,
+                                                      reverse_data[chrom]);
+                all_results.insert(all_results.end(), results.begin(), results.end());
             }
         }
     }
