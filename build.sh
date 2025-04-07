@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Compile the program
-g++ -o apa4 main.cpp bedpe_builder.cpp hic_slice_reader.cpp -lz
+g++ -o apa4 main.cpp apa.cpp bedpe_builder.cpp -lz
 
 # Example usage:
 # ./apa4 forward.bed reverse.bed 5000 50000 data.hicslice

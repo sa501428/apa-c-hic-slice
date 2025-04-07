@@ -37,7 +37,7 @@ public:
                  bool make_intra = true,
                  bool make_inter = false);
 
-    std::vector<BedpeEntry> buildBedpe(const std::string& output_file);
+    std::vector<BedpeEntry> buildBedpe();
 
 private:
     std::string forward_bed_file;

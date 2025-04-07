@@ -133,7 +133,7 @@ std::vector<BedpeEntry> BedpeBuilder::generateInterChromosomal(
     return results;
 }
 
-std::vector<BedpeEntry> BedpeBuilder::buildBedpe(const std::string& output_file) {
+std::vector<BedpeEntry> BedpeBuilder::buildBedpe() {
     auto forward_data = loadBedFile(forward_bed_file);
     auto reverse_data = loadBedFile(reverse_bed_file);
     
