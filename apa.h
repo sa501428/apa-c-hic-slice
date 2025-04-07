@@ -6,6 +6,7 @@
 #include <vector>
 #include <set>
 #include <unordered_map>
+#include <stdexcept>
 
 // Structure to hold binned regions for faster lookup
 struct BinRegion {
@@ -65,6 +66,9 @@ struct APAMatrix {
     int width;
     
     APAMatrix(int size) : width(size) {
+        if (size <= 0) {
+            throw std::runtime_error("APAMatrix size must be positive");
+        }
         matrix.resize(size, std::vector<float>(size, 0.0f));
     }
     
@@ -104,7 +108,7 @@ struct APAMatrix {
         for (int r = 0; r < width; ++r) {
             for (int c = 0; c < width; ++c) {
                 float normVal = rowSums[r] * colSums[c];
-                if (normVal > 0.0f) {
+                if (normVal > 0) {
                     normalized[r][c] = matrix[r][c] / normVal;
                 }
                 // If normVal is 0, leave normalized[r][c] as 0

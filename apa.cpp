@@ -31,6 +31,10 @@ APAMatrix processSliceFile(const std::string& slice_file,
                          bool isInter,
                          long min_genome_dist,
                          long max_genome_dist) {
+    if (window_size <= 0) {
+        throw std::runtime_error("Window size must be positive");
+    }
+
     // Open slice file
     gzFile file = gzopen(slice_file.c_str(), "rb");
     if (!file) {
@@ -50,10 +54,18 @@ APAMatrix processSliceFile(const std::string& slice_file,
             throw std::runtime_error("Failed to read resolution");
         }
 
+        if (resolution <= 0) {
+            throw std::runtime_error("Invalid resolution in slice file");
+        }
+
         // Read chromosome mapping
         int32_t numChromosomes;
         if (gzread(file, &numChromosomes, sizeof(int32_t)) != sizeof(int32_t)) {
             throw std::runtime_error("Failed to read chromosome count");
+        }
+
+        if (numChromosomes <= 0) {
+            throw std::runtime_error("Invalid number of chromosomes in slice file");
         }
 
         std::map<int16_t, std::string> chromosomeKeyToName;
