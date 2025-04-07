@@ -28,7 +28,9 @@ APAMatrix processSliceFile(const std::string& slice_file,
                          const std::vector<BedpeEntry>& bedpe_entries,
                          const std::string& output_file,
                          int window_size,
-                         bool isInter) {
+                         bool isInter,
+                         long min_genome_dist,
+                         long max_genome_dist) {
     // Open slice file
     gzFile file = gzopen(slice_file.c_str(), "rb");
     if (!file) {
@@ -75,13 +77,12 @@ APAMatrix processSliceFile(const std::string& slice_file,
             chromosomeKeyToName[key] = chromosomeName;
         }
 
-        // Create regions of interest for quick filtering
+        // Create coverage vectors and APA matrix
+        CoverageVectors coverage(resolution);  // Pass resolution to constructor
         RegionsOfInterest roi(bedpe_entries, resolution, window_size, isInter);
+        APAMatrix apaMatrix(window_size * 2 + 1);
 
-        // Create APA matrix for accumulating values
-        APAMatrix apaMatrix(window_size * 2 + 1);  // center +/- window_size
-
-        // Process contact records
+        // Single pass: process contacts for both coverage and APA
         struct {
             int16_t chr1Key;
             int32_t binX;
@@ -102,7 +103,29 @@ APAMatrix processSliceFile(const std::string& slice_file,
             if (isInter && chr1 == chr2) continue;
             if (!isInter && chr1 != chr2) continue;
 
-            // Quick filter - only process if bins are in regions of interest
+            // Add to coverage vectors (after inter/intra but before any other filtering)
+            coverage.add(chr1, record.binX, record.value);
+            if (chr1 != chr2 || record.binX != record.binY) {  // Don't double count diagonal
+                coverage.add(chr2, record.binY, record.value);
+            }
+
+            // For intra-chromosomal analysis, filter by genomic distance
+            if (!isInter) {
+                // Convert bin distance to genomic distance
+                int32_t bin_distance = std::abs(record.binX - record.binY);
+                int64_t genomic_distance = static_cast<int64_t>(bin_distance) * resolution;
+                
+                // Add buffer of 3*window_size to both min and max distances
+                int64_t buffer = static_cast<int64_t>(3 * window_size) * resolution;
+                
+                // Skip if outside the distance range (with buffer) used to generate BEDPE
+                if (genomic_distance < (min_genome_dist - buffer) || 
+                    genomic_distance > (max_genome_dist + buffer)) {
+                    continue;
+                }
+            }
+
+            // Process for APA matrix
             if (roi.probablyContainsRecord(chr1, chr2, record.binX, record.binY)) {
                 // Check each loop region
                 for (const auto& loop : bedpe_entries) {
@@ -133,6 +156,28 @@ APAMatrix processSliceFile(const std::string& slice_file,
         }
 
         gzclose(file);
+        
+        // After processing all contacts, normalize the matrix
+        std::vector<float> rowSums(apaMatrix.width, 0.0f);
+        std::vector<float> colSums(apaMatrix.width, 0.0f);
+
+        // Calculate row and column sums from coverage vectors
+        for (const auto& loop : bedpe_entries) {
+            // Convert to bin coordinates
+            int32_t bin1Start = (loop.start1 / resolution + loop.end1 / resolution) / 2 - window_size;
+            int32_t bin2Start = (loop.start2 / resolution + loop.end2 / resolution) / 2 - window_size;
+            
+            // Add local sums from coverage vectors
+            coverage.addLocalSums(rowSums, loop.chrom1, bin1Start, window_size);
+            coverage.addLocalSums(colSums, loop.chrom2, bin2Start, window_size);
+        }
+
+        // Scale sums by their averages
+        APAMatrix::scaleByAverage(rowSums);
+        APAMatrix::scaleByAverage(colSums);
+
+        // Normalize the matrix
+        apaMatrix.normalize(rowSums, colSums);
         
         // Save the matrix to file
         apaMatrix.save(output_file);

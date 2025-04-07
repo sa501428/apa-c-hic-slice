@@ -74,14 +74,91 @@ struct APAMatrix {
         }
     }
 
-    // Save matrix to file (format determined by extension)
+    // Get average of non-zero values
+    static float getAverage(const std::vector<float>& vec) {
+        float sum = 0.0f;
+        int count = 0;
+        for (float val : vec) {
+            if (val > 0) {
+                sum += val;
+                count++;
+            }
+        }
+        return count > 0 ? sum / count : 0.0f;
+    }
+
+    // Scale vector by its average
+    static void scaleByAverage(std::vector<float>& vec) {
+        float avg = getAverage(vec);
+        if (avg > 0) {
+            for (float& val : vec) {
+                val /= avg;
+            }
+        }
+    }
+
+    // Normalize matrix using row and column sums
+    void normalize(const std::vector<float>& rowSums, const std::vector<float>& colSums) {
+        std::vector<std::vector<float>> normalized(width, std::vector<float>(width, 0.0f));
+        
+        for (int r = 0; r < width; ++r) {
+            for (int c = 0; c < width; ++c) {
+                float normVal = rowSums[r] * colSums[c];
+                if (normVal > 0.0f) {
+                    normalized[r][c] = matrix[r][c] / normVal;
+                }
+            }
+        }
+        
+        matrix = std::move(normalized);
+    }
+
     void save(const std::string& filename) const;
+};
+
+// Structure to hold coverage vectors
+struct CoverageVectors {
+    std::unordered_map<std::string, std::vector<float>> vectors;  // chrom -> coverage vector
+    static const int32_t INITIAL_SIZE = 20000000;  // 20Mb
+    int32_t resolution;
+    
+    CoverageVectors(int32_t res) : resolution(res) {}
+    
+    void add(const std::string& chrom, int32_t bin, float value) {
+        auto& vec = vectors[chrom];
+        if (vec.empty()) {
+            // Pre-allocate with reasonable size on first use
+            vec.resize(INITIAL_SIZE / resolution, 0.0f);
+        }
+        if (bin >= vec.size()) {
+            // If we need more space, double the size
+            vec.resize(std::max(vec.size() * 2, static_cast<size_t>(bin * 2)), 0.0f);
+        }
+        vec[bin] += value;
+    }
+
+    // Get sums for a window around a bin position
+    void addLocalSums(std::vector<float>& sums, const std::string& chrom, 
+                     int32_t binStart, int32_t windowSize) const {
+        auto it = vectors.find(chrom);
+        if (it != vectors.end()) {
+            const auto& vec = it->second;
+            for (int i = 0; i < windowSize * 2 + 1; i++) {
+                int32_t bin = binStart + i;
+                if (bin >= 0 && bin < vec.size()) {
+                    sums[i] += vec[bin];
+                }
+            }
+        }
+    }
 };
 
 APAMatrix processSliceFile(const std::string& slice_file, 
                          const std::vector<BedpeEntry>& bedpe_entries,
                          const std::string& output_file,
                          int window_size = 10,
-                         bool isInter = false);  // Add isInter parameter
+                         bool isInter = false,
+                         long min_genome_dist = 0,    // Add distance parameters
+                         long max_genome_dist = 0);   // for intra filtering
 
 #endif 
