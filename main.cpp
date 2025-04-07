@@ -1,12 +1,12 @@
 #include "bedpe_builder.h"
-#include "hic_slice_reader.h"
 #include <iostream>
 #include <zlib.h>
 #include <stdexcept>
 #include <cstring>
 #include <cmath>
 #include <map>
-
+#include <string>
+#include <vector>
 
 // APA4 Aggregate Peak Analysis
 // first generate a bedpe file of all potential loop locations from bed files
@@ -25,14 +25,12 @@ void printUsage() {
 }
 
 int main(int argc, char* argv[]) {
-
-    std::vector<BedpeEntry> bedpe_entries;
     try {
         int argOffset = 1;
         bool makeIntra = true;
         bool makeInter = false;
         
-        if (argc < 6) {
+        if (argc < 7) {  // Need one more arg for output file
             printUsage();
             return 1;
         }
@@ -51,23 +49,17 @@ int main(int argc, char* argv[]) {
         std::string reverse_bed = argv[argOffset + 1];
         long min_dist = std::stol(argv[argOffset + 2]);
         long max_dist = std::stol(argv[argOffset + 3]);
-        std::string output_file = argv[argOffset + 4];
+        std::string slice_file = argv[argOffset + 4];
+        std::string output_file = argv[argOffset + 5];
         
+        // Generate BEDPE entries
         BedpeBuilder builder(forward_bed, reverse_bed, min_dist, max_dist, makeIntra, makeInter);
-        bedpe_entries = builder.buildBedpe(output_file);
+        auto bedpe_entries = builder.buildBedpe("");  // Empty string since we don't write to file
 
-        struct {
-        int16_t chr1Key;
-        int32_t binX;
-        int16_t chr2Key;
-        int32_t binY;
-        float value;
-        } compressedRecord;
-
-
-        gzFile file = gzopen(filePath.c_str(), "rb");
+        // Open slice file
+        gzFile file = gzopen(slice_file.c_str(), "rb");
         if (!file) {
-            throw std::runtime_error("Could not open file: " + filePath);
+            throw std::runtime_error("Could not open file: " + slice_file);
         }
 
         // Read and verify magic string
@@ -76,22 +68,19 @@ int main(int argc, char* argv[]) {
             throw std::runtime_error("Invalid file format: missing magic string");
         }
 
-        int32_t resolution;
-        int32_t numChromosomes; 
-
         // Read resolution
+        int32_t resolution;
         if (gzread(file, &resolution, sizeof(int32_t)) != sizeof(int32_t)) {
             throw std::runtime_error("Failed to read resolution");
         }
 
-        // Read number of chromosomes
+        // Read chromosome mapping
+        int32_t numChromosomes;
         if (gzread(file, &numChromosomes, sizeof(int32_t)) != sizeof(int32_t)) {
             throw std::runtime_error("Failed to read chromosome count");
         }
 
         std::map<int16_t, std::string> chromosomeKeyToName;
-
-        // Read chromosome mapping
         for (int i = 0; i < numChromosomes; i++) {
             int32_t nameLength;
             if (gzread(file, &nameLength, sizeof(int32_t)) != sizeof(int32_t)) {
@@ -112,28 +101,53 @@ int main(int argc, char* argv[]) {
             chromosomeKeyToName[key] = chromosomeName;
         }
 
-        headerRead = true;
-
-        while (gzread(file, &compressedRecord, sizeof(compressedRecord)) == sizeof(compressedRecord)) {
-            SliceContactRecord record;
-            record.chr1 = getChromosomeFromKey(compressedRecord.chr1Key);
-            record.binX = compressedRecord.binX;
-            record.chr2 = getChromosomeFromKey(compressedRecord.chr2Key);
-            record.binY = compressedRecord.binY;
-            record.value = compressedRecord.value;
+        // Create map for faster BEDPE lookup
+        std::map<std::pair<std::string, std::string>, std::vector<std::pair<std::pair<int32_t, int32_t>, std::pair<int32_t, int32_t>>>> regionMap;
+        for (const auto& entry : bedpe_entries) {
+            int32_t binStart1 = entry.start1 / resolution;
+            int32_t binEnd1 = (entry.end1 + resolution - 1) / resolution;
+            int32_t binStart2 = entry.start2 / resolution;
+            int32_t binEnd2 = (entry.end2 + resolution - 1) / resolution;
+            regionMap[{entry.chrom1, entry.chrom2}].push_back({{binStart1, binEnd1}, {binStart2, binEnd2}});
         }
 
+        // Process contact records
+        float totalCount = 0;
+        struct {
+            int16_t chr1Key;
+            int32_t binX;
+            int16_t chr2Key;
+            int32_t binY;
+            float value;
+        } record;
+
+        while (gzread(file, &record, sizeof(record)) == sizeof(record)) {
+            if (std::isnan(record.value) || std::isinf(record.value) || record.value <= 0) {
+                continue;
+            }
+
+            std::string chr1 = chromosomeKeyToName[record.chr1Key];
+            std::string chr2 = chromosomeKeyToName[record.chr2Key];
+            
+            auto it = regionMap.find({chr1, chr2});
+            if (it != regionMap.end()) {
+                for (const auto& region : it->second) {
+                    if (record.binX >= region.first.first && record.binX < region.first.second &&
+                        record.binY >= region.second.first && record.binY < region.second.second) {
+                        totalCount += record.value;
+                        break;  // Count each contact only once
+                    }
+                }
+            }
+        }
+
+        gzclose(file);
+        std::cout << "Total contact count in BEDPE regions: " << totalCount << std::endl;
         
     } catch (const std::exception& e) {
         std::cerr << "Error: " << e.what() << std::endl;
         return 1;
     }
 
-    // read the hic slice file
-    HicSliceReader reader(hic_slice_file);
-    int32_t resolution = reader.getResolution();
-
-    // iterate through the bedpe entries
-    for (const auto& bedpe_entry : bedpe_entries) {
-    
+    return 0;
 } 

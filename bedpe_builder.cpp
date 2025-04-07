@@ -74,7 +74,7 @@ std::vector<BedpeEntry> BedpeBuilder::generateIntraChromosomal(
     return results;
 }
 
-bool isStandardChromosome(const std::string& chrom) {
+static bool isStandardChromosome(const std::string& chrom) {
     // Check if it starts with "chr"
     if (chrom.substr(0, 3) != "chr") {
         return false;
@@ -139,7 +139,6 @@ std::vector<BedpeEntry> BedpeBuilder::buildBedpe(const std::string& output_file)
     
     std::vector<BedpeEntry> all_results;
     
-    // Generate intra-chromosomal pairs
     if (make_intra) {
         for (const auto& forward_pair : forward_data) {
             const std::string& chrom = forward_pair.first;
@@ -152,7 +151,6 @@ std::vector<BedpeEntry> BedpeBuilder::buildBedpe(const std::string& output_file)
         }
     }
     
-    // Generate inter-chromosomal pairs
     if (make_inter) {
         for (const auto& forward_pair : forward_data) {
             for (const auto& reverse_pair : reverse_data) {
@@ -175,4 +173,20 @@ std::vector<BedpeEntry> BedpeBuilder::buildBedpe(const std::string& output_file)
     all_results.erase(last, all_results.end());
 
     return all_results;
+}
+
+bool BedpeEntry::operator<(const BedpeEntry& other) const {
+    if (chrom1 != other.chrom1) return chrom1 < other.chrom1;
+    if (chrom2 != other.chrom2) return chrom2 < other.chrom2;
+    if (start1 != other.start1) return start1 < other.start1;
+    return start2 < other.start2;
+}
+
+bool BedpeEntry::operator==(const BedpeEntry& other) const {
+    return chrom1 == other.chrom1 &&
+           start1 == other.start1 &&
+           end1 == other.end1 &&
+           chrom2 == other.chrom2 &&
+           start2 == other.start2 &&
+           end2 == other.end2;
 } 
