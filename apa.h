@@ -10,6 +10,7 @@
 #include <cstdint>  // For int32_t
 #include <iostream>
 #include <algorithm>
+#include <map>
 
 // Structure to hold binned regions for faster lookup
 struct BinRegion {
@@ -165,6 +166,63 @@ struct CoverageVectors {
                 }
             }
         }
+    }
+};
+
+// Add this structure to help with loop lookup
+struct ChromPair {
+    std::string chrom1;
+    std::string chrom2;
+    
+    bool operator<(const ChromPair& other) const {
+        if (chrom1 != other.chrom1) return chrom1 < other.chrom1;
+        return chrom2 < other.chrom2;
+    }
+};
+
+// Structure to hold preprocessed loops for fast lookup
+struct LoopIndex {
+    static const int32_t BIN_GROUP_SIZE = 1000;  // Group size for binning
+    std::map<ChromPair, std::map<int32_t, std::vector<const BedpeEntry*>>> loops;
+    int32_t resolution;
+    
+    LoopIndex(const std::vector<BedpeEntry>& bedpe_entries, int32_t res) : resolution(res) {
+        // Preprocess loops into the index
+        for (const auto& loop : bedpe_entries) {
+            ChromPair chrom_pair{loop.chrom1, loop.chrom2};
+            
+            // Calculate midpoint bin and group
+            int32_t mid_bin = ((loop.start1 + loop.end1) / 2) / resolution;
+            int32_t bin_group = mid_bin / BIN_GROUP_SIZE;
+            
+            // Store pointer to loop in appropriate group
+            loops[chrom_pair][bin_group].push_back(&loop);
+        }
+    }
+    
+    // Get loops that might be relevant for a given contact
+    std::vector<const BedpeEntry*> getNearbyLoops(const std::string& chr1, const std::string& chr2, 
+                                                 int32_t binX) const {
+        ChromPair chrom_pair{chr1, chr2};
+        auto chrom_it = loops.find(chrom_pair);
+        if (chrom_it == loops.end()) return {};
+        
+        // Calculate which bin group this contact belongs to
+        int32_t bin_group = binX / BIN_GROUP_SIZE;
+        
+        std::vector<const BedpeEntry*> nearby_loops;
+        
+        // Check the bin group and adjacent groups
+        for (int32_t i = -1; i <= 1; i++) {
+            auto group_it = chrom_it->second.find(bin_group + i);
+            if (group_it != chrom_it->second.end()) {
+                nearby_loops.insert(nearby_loops.end(), 
+                                  group_it->second.begin(), 
+                                  group_it->second.end());
+            }
+        }
+        
+        return nearby_loops;
     }
 };
 

@@ -101,6 +101,9 @@ APAMatrix processSliceFile(const std::string& slice_file,
         RegionsOfInterest roi(bedpe_entries, resolution, window_size, isInter);
         APAMatrix apaMatrix(window_size * 2 + 1);
 
+        // Create index for fast loop lookup
+        LoopIndex loop_index(bedpe_entries, resolution);
+
         // Single pass: process contacts for both coverage and APA
         struct {
             int16_t chr1Key;
@@ -152,30 +155,30 @@ APAMatrix processSliceFile(const std::string& slice_file,
                 }
             }
 
-            // Process for APA matrix
+            // Quick filter using RegionsOfInterest first
             if (roi.probablyContainsRecord(chr1, chr2, record.binX, record.binY)) {
-                // Check each loop region
-                for (const auto& loop : bedpe_entries) {
-                    if (loop.chrom1 == chr1 && loop.chrom2 == chr2) {
-                        // Convert BEDPE coordinates to bin positions
-                        int32_t bin1Start = loop.start1 / resolution;
-                        int32_t bin1End = (loop.end1 / resolution) + 1;  // +1 to include the full range
-                        int32_t bin2Start = loop.start2 / resolution;
-                        int32_t bin2End = (loop.end2 / resolution) + 1;  // +1 to include the full range
+                // Only if it passes the quick filter, get potentially relevant loops
+                auto nearby_loops = loop_index.getNearbyLoops(chr1, chr2, record.binX);
+                
+                // Process only nearby loops
+                for (const auto* loop : nearby_loops) {
+                    // Convert BEDPE coordinates to bin positions
+                    int32_t bin1Start = loop->start1 / resolution;
+                    int32_t bin1End = (loop->end1 / resolution) + 1;
+                    int32_t bin2Start = loop->start2 / resolution;
+                    int32_t bin2End = (loop->end2 / resolution) + 1;
+                    
+                    // Calculate center bin positions
+                    int32_t loopCenterX = (bin1Start + bin1End) / 2;
+                    int32_t loopCenterY = (bin2Start + bin2End) / 2;
+                    
+                    // Only process if contact is within window of loop center
+                    if (std::abs(record.binX - loopCenterX) <= window_size &&
+                        std::abs(record.binY - loopCenterY) <= window_size) {
                         
-                        // Calculate center bin positions
-                        int32_t loopCenterX = (bin1Start + bin1End) / 2;
-                        int32_t loopCenterY = (bin2Start + bin2End) / 2;
-                        
-                        // Calculate upper-left corner of window
-                        int32_t windowStartX = loopCenterX - window_size;
-                        int32_t windowStartY = loopCenterY - window_size;
-                        
-                        // Calculate relative position from upper-left corner
-                        int relX = record.binX - windowStartX;
-                        int relY = record.binY - windowStartY;
-                        
-                        // Add to matrix if within bounds
+                        // Calculate relative position and add to matrix
+                        int relX = record.binX - (loopCenterX - window_size);
+                        int relY = record.binY - (loopCenterY - window_size);
                         apaMatrix.add(relX, relY, record.value);
                     }
                 }
