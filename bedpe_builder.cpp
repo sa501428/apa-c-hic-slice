@@ -133,7 +133,7 @@ std::vector<BedpeEntry> BedpeBuilder::generateInterChromosomal(
     return results;
 }
 
-void BedpeBuilder::buildBedpe(const std::string& output_file) {
+std::vector<BedpeEntry> BedpeBuilder::buildBedpe(const std::string& output_file) {
     auto forward_data = loadBedFile(forward_bed_file);
     auto reverse_data = loadBedFile(reverse_bed_file);
     
@@ -174,5 +174,5 @@ void BedpeBuilder::buildBedpe(const std::string& output_file) {
     auto last = std::unique(all_results.begin(), all_results.end());
     all_results.erase(last, all_results.end());
 
-    // use to run aggregate analysis
+    return all_results;
 } 

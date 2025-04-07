@@ -23,11 +23,7 @@ struct BedpeEntry {
     std::string chrom2;
     long start2;
     long end2;
-    std::string name = ".";
-    std::string score = ".";
-    std::string strand1 = ".";
-    std::string strand2 = ".";
-    std::string color = "0,0,0";
+
 
     // Helper function to normalize chromosome order (only for inter-chromosomal)
     void normalizeOrder() {
