@@ -223,8 +223,7 @@ std::vector<APAMatrix> processSliceFile(
                 }
             }
 
-            // Process for each BEDPE set in parallel
-            #pragma omp parallel for schedule(dynamic)
+            // Process for each BEDPE set
             for (size_t bedpe_idx = 0; bedpe_idx < all_bedpe_entries.size(); bedpe_idx++) {
                 if (all_roi[bedpe_idx].probablyContainsRecord(chr1, chr2, record.binX, record.binY)) {
                     auto nearby_loops = all_indices[bedpe_idx].getNearbyLoops(chr1, chr2, record.binX);
@@ -247,10 +246,7 @@ std::vector<APAMatrix> processSliceFile(
                             // Calculate relative position and add to matrix
                             int relX = record.binX - (loopCenterX - window_size);
                             int relY = record.binY - (loopCenterY - window_size);
-                            #pragma omp critical
-                            {
-                                all_matrices[bedpe_idx].add(relX, relY, record.value);
-                            }
+                            all_matrices[bedpe_idx].add(relX, relY, record.value);
                         }
                     }
                 }
