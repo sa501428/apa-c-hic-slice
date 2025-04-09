@@ -43,17 +43,16 @@ namespace detail {
         return 20000000 / resolution; // Default fallback size
     }
 
-    // Helper function to estimate memory for a chromosome's coverage vector
-    size_t estimateChromCoverageMemory(const std::string& chrom, int32_t resolution) {
+    // Make all function definitions inline
+    inline size_t estimateChromCoverageMemory(const std::string& chrom, int32_t resolution) {
         auto it = DEFAULT_CHROM_SIZES.find(chrom);
         if (it != DEFAULT_CHROM_SIZES.end()) {
-            return (it->second / resolution + 1) * sizeof(float);
+            return (it->second / resolution + 1) * 4;  // 4 bytes per float
         }
-        return 20000000 / resolution * sizeof(float); // Default size
+        return 20000000 / resolution * 4; // Default size, 4 bytes per float
     }
 
-    // Estimate memory usage for all data structures
-    size_t estimateMemoryUsage(const std::vector<std::vector<BedpeEntry>>& bedpe_entries, 
+    inline size_t estimateMemoryUsage(const std::vector<std::vector<BedpeEntry>>& bedpe_entries, 
                               int window_size) {
         size_t total_bedpes = 0;
         std::set<std::string> unique_chroms;
@@ -131,7 +130,7 @@ namespace detail {
         return peak_memory;
     }
 
-    void checkMemoryRequirements(const std::vector<std::vector<BedpeEntry>>& bedpe_entries,
+    inline void checkMemoryRequirements(const std::vector<std::vector<BedpeEntry>>& bedpe_entries,
                                int window_size) {
         size_t estimated_bytes = estimateMemoryUsage(bedpe_entries, window_size);
         
