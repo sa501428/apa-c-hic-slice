@@ -98,7 +98,8 @@ std::vector<APAMatrix> processSliceFile(
         }
 
         // Clear original BedpeEntries as they're no longer needed
-        std::vector<std::vector<BedpeEntry>>().swap(all_bedpe_entries);
+        all_bedpe_entries.clear();
+        all_bedpe_entries.shrink_to_fit();
 
         // Create vectors to hold per-bedpe data structures
         size_t num_bedpes = all_roi.size();
@@ -273,7 +274,8 @@ std::vector<APAMatrix> processSliceFile(
         std::cout << "Finished processing " << contact_count << " contacts" << std::endl;
         
         // Free RegionsOfInterest as it's no longer needed for contact processing
-        std::vector<RegionsOfInterest>().swap(all_roi);
+        all_roi.clear();
+        all_roi.shrink_to_fit();
 
         std::cout << "Calculating coverage normalization..." << std::endl;
         // After processing all contacts, normalize each matrix
@@ -293,9 +295,6 @@ std::vector<APAMatrix> processSliceFile(
             all_matrices[bedpe_idx].normalize(all_rowSums[bedpe_idx], all_colSums[bedpe_idx]);
         }
 
-        // Free coverage vectors as they're no longer needed after normalization
-        CoverageVectors().swap(coverage);
-        
         if (is_compressed) {
             gzclose(gz_file);
         } else {

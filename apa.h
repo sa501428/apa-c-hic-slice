@@ -13,11 +13,17 @@
 #include <algorithm>
 #include <map>
 #include <sys/sysinfo.h>
+#include <iomanip>
 
-// Add after existing includes
-#include <unordered_map>
+// Forward declarations
+struct BedpeEntry;
+struct LoopInfo;
+struct ChromPair;
+struct RegionsOfInterest;
+struct LoopIndex;
+struct APAMatrix;
+struct CoverageVectors;
 
-// Add before the RegionsOfInterest struct
 namespace {
     // Default chromosome sizes (in bp)
     const std::unordered_map<std::string, int64_t> DEFAULT_CHROM_SIZES = {
