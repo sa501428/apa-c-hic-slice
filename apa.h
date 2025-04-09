@@ -12,6 +12,7 @@
 #include <iostream>
 #include <algorithm>
 #include <map>
+#include <sys/sysinfo.h>
 
 // Add after existing includes
 #include <unordered_map>
@@ -37,6 +38,126 @@ namespace {
             return (it->second / resolution) + 1;
         }
         return 20000000 / resolution; // Default fallback size
+    }
+
+    // Helper function to estimate memory for a chromosome's coverage vector
+    size_t estimateChromCoverageMemory(const std::string& chrom, int32_t resolution) {
+        auto it = DEFAULT_CHROM_SIZES.find(chrom);
+        if (it != DEFAULT_CHROM_SIZES.end()) {
+            return (it->second / resolution + 1) * sizeof(float);
+        }
+        return 20000000 / resolution * sizeof(float); // Default size
+    }
+
+    // Estimate memory usage for all data structures
+    size_t estimateMemoryUsage(const std::vector<std::vector<BedpeEntry>>& bedpe_entries, 
+                              int window_size) {
+        size_t total_bedpes = 0;
+        std::set<std::string> unique_chroms;
+        
+        // Count total BEDPEs and unique chromosomes
+        for (const auto& entries : bedpe_entries) {
+            total_bedpes += entries.size();
+            for (const auto& entry : entries) {
+                unique_chroms.insert(entry.chrom1);
+                unique_chroms.insert(entry.chrom2);
+            }
+        }
+        
+        size_t peak_memory = 0;
+        size_t current_memory = 0;
+        
+        // Phase 1: Initial loading and structure creation
+        // BedpeEntry vectors (temporary, freed after structure creation)
+        current_memory += sizeof(BedpeEntry) * total_bedpes;
+        
+        // RegionsOfInterest (2 maps of sets of bin indices)
+        size_t roi_size = bedpe_entries.size() * // Number of ROIs
+                         total_bedpes * // Entries per ROI
+                         (window_size * 2 + 1) * 2 * // Indices per entry (both dimensions)
+                         sizeof(int32_t); // Size of each index
+        current_memory += roi_size;
+        
+        // LoopIndex structures with LoopInfo
+        size_t loop_index_size = 0;
+        // - LoopInfo objects (more compact than BedpeEntry)
+        loop_index_size += total_bedpes * sizeof(LoopInfo) * bedpe_entries.size();
+        // - ChromPair map structures
+        size_t chrom_pairs = (unique_chroms.size() * unique_chroms.size()) / 4;
+        loop_index_size += chrom_pairs * (
+            sizeof(ChromPair) + 
+            sizeof(std::map<int32_t, std::vector<LoopInfo>>) +
+            // Estimate bin groups per chrom pair
+            (DEFAULT_CHROM_SIZES.at("chr1") / (1000 * LoopIndex::BIN_GROUP_SIZE)) * 
+            sizeof(std::vector<LoopInfo>)
+        );
+        current_memory += loop_index_size;
+        
+        peak_memory = std::max(peak_memory, current_memory);
+        
+        // Phase 2: After freeing BedpeEntries
+        current_memory -= sizeof(BedpeEntry) * total_bedpes;
+        
+        // APAMatrix (width x width float matrix for each BEDPE set)
+        size_t matrix_width = window_size * 2 + 1;
+        size_t matrix_size = matrix_width * matrix_width * sizeof(float);
+        current_memory += bedpe_entries.size() * matrix_size;
+        
+        // Coverage vectors (one float vector per chromosome)
+        size_t coverage_size = 0;
+        for (const auto& chrom : unique_chroms) {
+            coverage_size += estimateChromCoverageMemory(chrom, 1000);
+        }
+        current_memory += coverage_size;
+        
+        peak_memory = std::max(peak_memory, current_memory);
+        
+        // Phase 3: After freeing ROI
+        current_memory -= roi_size;
+        
+        // Row and column sums (float vector for each BEDPE set)
+        size_t sums_size = bedpe_entries.size() * 2 * // Two vectors per BEDPE set
+                          matrix_width * sizeof(float); // Elements per vector
+        current_memory += sums_size;
+        
+        peak_memory = std::max(peak_memory, current_memory);
+
+        // Add 30% overhead for STL containers and other overhead
+        peak_memory = static_cast<size_t>(peak_memory * 1.3);
+        
+        return peak_memory;
+    }
+
+    void checkMemoryRequirements(const std::vector<std::vector<BedpeEntry>>& bedpe_entries,
+                               int window_size) {
+        size_t estimated_bytes = estimateMemoryUsage(bedpe_entries, window_size);
+        
+        // Get available system memory
+        struct sysinfo si;
+        if (sysinfo(&si) == 0) {
+            uint64_t total_ram = si.totalram * si.mem_unit;
+            uint64_t available_ram = si.freeram * si.mem_unit;
+            
+            double est_gb = estimated_bytes / (1024.0 * 1024.0 * 1024.0);
+            double total_gb = total_ram / (1024.0 * 1024.0 * 1024.0);
+            double avail_gb = available_ram / (1024.0 * 1024.0 * 1024.0);
+            
+            std::cout << "\nMemory Requirements:\n"
+                      << "Estimated memory needed: " << std::fixed << std::setprecision(2) 
+                      << est_gb << " GB\n"
+                      << "Total system RAM: " << std::setprecision(2) << total_gb << " GB\n"
+                      << "Available RAM: " << std::setprecision(2) << avail_gb << " GB\n\n";
+            
+            if (estimated_bytes > available_ram * 0.9) { // Leave 10% buffer
+                throw std::runtime_error(
+                    "Insufficient memory available. Need " + 
+                    std::to_string(est_gb) + " GB but only " + 
+                    std::to_string(avail_gb) + " GB available"
+                );
+            }
+        } else {
+            std::cerr << "Warning: Could not check system memory. Continuing without verification.\n";
+        }
     }
 }
 
@@ -206,49 +327,54 @@ struct ChromPair {
 
 // Structure to hold preprocessed loops for fast lookup
 struct LoopIndex {
-    static const int32_t BIN_GROUP_SIZE = 1000;  // Group size for binning
-    std::map<ChromPair, std::map<int32_t, std::vector<const BedpeEntry*>>> loops;
+    static const int32_t BIN_GROUP_SIZE = 1000;
+    std::map<ChromPair, std::map<int32_t, std::vector<LoopInfo>>> loops;
     int32_t resolution;
     
     LoopIndex(const std::vector<BedpeEntry>& bedpe_entries, int32_t res) : resolution(res) {
-        // Preprocess loops into the index
         for (const auto& loop : bedpe_entries) {
             ChromPair chrom_pair{loop.chrom1, loop.chrom2};
-            
-            // Calculate midpoint bin and group
             int32_t mid_bin = ((loop.start1 + loop.end1) / 2) / resolution;
             int32_t bin_group = mid_bin / BIN_GROUP_SIZE;
-            
-            // Store pointer to loop in appropriate group
-            loops[chrom_pair][bin_group].push_back(&loop);
+            loops[chrom_pair][bin_group].emplace_back(loop);
         }
     }
     
-    // Get loops that might be relevant for a given contact
-    std::vector<const BedpeEntry*> getNearbyLoops(const std::string& chr1, const std::string& chr2, 
-                                                 int32_t binX) const {
+    std::vector<const LoopInfo*> getNearbyLoops(const std::string& chr1, const std::string& chr2, 
+                                               int32_t binX) const {
         ChromPair chrom_pair{chr1, chr2};
         auto chrom_it = loops.find(chrom_pair);
         if (chrom_it == loops.end()) return {};
         
-        // Calculate which bin group this contact belongs to
         int32_t bin_group = binX / BIN_GROUP_SIZE;
+        std::vector<const LoopInfo*> nearby_loops;
+        nearby_loops.reserve(10);
         
-        std::vector<const BedpeEntry*> nearby_loops;
-        nearby_loops.reserve(10);  // Pre-allocate space for 1M loops
-        
-        // Check the bin group and adjacent groups
         for (int32_t i = -1; i <= 1; i++) {
             auto group_it = chrom_it->second.find(bin_group + i);
             if (group_it != chrom_it->second.end()) {
-                nearby_loops.insert(nearby_loops.end(), 
-                                  group_it->second.begin(), 
-                                  group_it->second.end());
+                for (const auto& loop : group_it->second) {
+                    nearby_loops.push_back(&loop);
+                }
             }
         }
-        
         return nearby_loops;
     }
+};
+
+// Add this structure before LoopIndex
+struct LoopInfo {
+    std::string chrom1;
+    std::string chrom2;
+    int32_t start1;
+    int32_t end1;
+    int32_t start2;
+    int32_t end2;
+    
+    LoopInfo(const BedpeEntry& entry) 
+        : chrom1(entry.chrom1), chrom2(entry.chrom2),
+          start1(entry.start1), end1(entry.end1),
+          start2(entry.start2), end2(entry.end2) {}
 };
 
 // Update function declaration

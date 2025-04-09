@@ -100,6 +100,14 @@ int main(int argc, char* argv[]) {
             all_bedpe_entries[i] = builder.buildBedpe();
         }
 
+        // After loading all BEDPE entries but before processing
+        try {
+            checkMemoryRequirements(all_bedpe_entries, window_size);
+        } catch (const std::runtime_error& e) {
+            std::cerr << "Memory check failed: " << e.what() << std::endl;
+            return 1;
+        }
+
         std::cout << "Processing slice file: " << slice_file << std::endl;
         auto matrices = processSliceFile(slice_file, all_bedpe_entries, 
                                        window_size, isInter, min_dist, max_dist);

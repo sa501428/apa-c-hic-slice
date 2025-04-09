@@ -86,23 +86,31 @@ std::vector<APAMatrix> processSliceFile(
 
         std::cout << "Resolution is " << resolution << std::endl;
 
-        // Create vectors to hold per-bedpe data structures
-        size_t num_bedpes = all_bedpe_entries.size();
+        // Create data structures from BedpeEntries and then discard them
         std::vector<RegionsOfInterest> all_roi;
-        std::vector<APAMatrix> all_matrices;
         std::vector<LoopIndex> all_indices;
+        all_roi.reserve(all_bedpe_entries.size());
+        all_indices.reserve(all_bedpe_entries.size());
+
+        for (const auto& entries : all_bedpe_entries) {
+            all_roi.emplace_back(entries, resolution, window_size, isInter);
+            all_indices.emplace_back(entries, resolution);
+        }
+
+        // Clear original BedpeEntries as they're no longer needed
+        std::vector<std::vector<BedpeEntry>>().swap(all_bedpe_entries);
+
+        // Create vectors to hold per-bedpe data structures
+        size_t num_bedpes = all_roi.size();
+        std::vector<APAMatrix> all_matrices;
         std::vector<std::vector<float>> all_rowSums(num_bedpes);
         std::vector<std::vector<float>> all_colSums(num_bedpes);
 
         // Initialize data structures for each BEDPE set
         all_matrices.reserve(num_bedpes);
-        all_roi.reserve(num_bedpes);
-        all_indices.reserve(num_bedpes);
 
         for (size_t i = 0; i < num_bedpes; i++) {
             all_matrices.push_back(APAMatrix(window_size * 2 + 1));
-            all_roi.push_back(RegionsOfInterest(all_bedpe_entries[i], resolution, window_size, isInter));
-            all_indices.push_back(LoopIndex(all_bedpe_entries[i], resolution));
             all_rowSums[i].resize(window_size * 2 + 1, 0.0f);
             all_colSums[i].resize(window_size * 2 + 1, 0.0f);
         }
@@ -232,7 +240,7 @@ std::vector<APAMatrix> processSliceFile(
             }
 
             // Process for each BEDPE set
-            for (size_t bedpe_idx = 0; bedpe_idx < all_bedpe_entries.size(); bedpe_idx++) {
+            for (size_t bedpe_idx = 0; bedpe_idx < all_roi.size(); bedpe_idx++) {
                 if (all_roi[bedpe_idx].probablyContainsRecord(chr1, chr2, record.binX, record.binY)) {
                     auto nearby_loops = all_indices[bedpe_idx].getNearbyLoops(chr1, chr2, record.binX);
                     
@@ -264,11 +272,14 @@ std::vector<APAMatrix> processSliceFile(
 
         std::cout << "Finished processing " << contact_count << " contacts" << std::endl;
         
+        // Free RegionsOfInterest as it's no longer needed for contact processing
+        std::vector<RegionsOfInterest>().swap(all_roi);
+
         std::cout << "Calculating coverage normalization..." << std::endl;
         // After processing all contacts, normalize each matrix
         for (size_t bedpe_idx = 0; bedpe_idx < all_matrices.size(); bedpe_idx++) {
             // Calculate row and column sums for this matrix
-            for (const auto& loop : all_bedpe_entries[bedpe_idx]) {
+            for (const auto& loop : all_roi[bedpe_idx]) {
                 int32_t bin1Start = ((loop.start1 + loop.end1) / 2) / resolution - window_size;
                 int32_t bin2Start = ((loop.start2 + loop.end2) / 2) / resolution - window_size;
                 
@@ -281,6 +292,9 @@ std::vector<APAMatrix> processSliceFile(
             APAMatrix::scaleByAverage(all_colSums[bedpe_idx]);
             all_matrices[bedpe_idx].normalize(all_rowSums[bedpe_idx], all_colSums[bedpe_idx]);
         }
+
+        // Free coverage vectors as they're no longer needed after normalization
+        CoverageVectors().swap(coverage);
         
         if (is_compressed) {
             gzclose(gz_file);
