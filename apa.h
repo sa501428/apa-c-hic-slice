@@ -1,7 +1,7 @@
 #ifndef APA_H
 #define APA_H
 
-#include "bedpe_builder.h"
+#include "bedpe_builder.h"  // Must come first since it defines BedpeEntry
 #include <string>
 #include <vector>
 #include <set>
@@ -17,8 +17,6 @@
 
 // Forward declarations
 struct BedpeEntry;
-struct LoopInfo;
-struct ChromPair;
 struct RegionsOfInterest;
 struct LoopIndex;
 struct APAMatrix;
@@ -74,39 +72,39 @@ namespace {
         size_t current_memory = 0;
         
         // Phase 1: Initial loading and structure creation
-        // BedpeEntry vectors (temporary, freed after structure creation)
-        current_memory += sizeof(BedpeEntry) * total_bedpes;
+        // BedpeEntry size: 2 strings (32 bytes each) + 4 longs (8 bytes each)
+        current_memory += total_bedpes * (64 + 32);
         
         // RegionsOfInterest (2 maps of sets of bin indices)
         size_t roi_size = bedpe_entries.size() * // Number of ROIs
                          total_bedpes * // Entries per ROI
                          (window_size * 2 + 1) * 2 * // Indices per entry (both dimensions)
-                         sizeof(int32_t); // Size of each index
+                         4; // Size of int32_t
         current_memory += roi_size;
         
         // LoopIndex structures with LoopInfo
         size_t loop_index_size = 0;
-        // - LoopInfo objects (more compact than BedpeEntry)
-        loop_index_size += total_bedpes * sizeof(LoopInfo) * bedpe_entries.size();
-        // - ChromPair map structures
+        // LoopInfo: 2 strings (32 bytes each) + 6 int32_t (4 bytes each)
+        loop_index_size += total_bedpes * (64 + 24) * bedpe_entries.size();
+        
+        // ChromPair map structures
         size_t chrom_pairs = (unique_chroms.size() * unique_chroms.size()) / 4;
         loop_index_size += chrom_pairs * (
-            sizeof(ChromPair) + 
-            sizeof(std::map<int32_t, std::vector<LoopInfo>>) +
+            64 + // ChromPair (2 strings, 32 bytes each)
+            48 + // std::map overhead
             // Estimate bin groups per chrom pair
-            (DEFAULT_CHROM_SIZES.at("chr1") / (1000 * LoopIndex::BIN_GROUP_SIZE)) * 
-            sizeof(std::vector<LoopInfo>)
+            (DEFAULT_CHROM_SIZES.at("chr1") / (1000 * LoopIndex::BIN_GROUP_SIZE)) * 24 // vector overhead
         );
         current_memory += loop_index_size;
         
         peak_memory = std::max(peak_memory, current_memory);
         
         // Phase 2: After freeing BedpeEntries
-        current_memory -= sizeof(BedpeEntry) * total_bedpes;
+        current_memory -= total_bedpes * (64 + 32);
         
         // APAMatrix (width x width float matrix for each BEDPE set)
         size_t matrix_width = window_size * 2 + 1;
-        size_t matrix_size = matrix_width * matrix_width * sizeof(float);
+        size_t matrix_size = matrix_width * matrix_width * 4; // 4 bytes per float
         current_memory += bedpe_entries.size() * matrix_size;
         
         // Coverage vectors (one float vector per chromosome)
@@ -123,7 +121,7 @@ namespace {
         
         // Row and column sums (float vector for each BEDPE set)
         size_t sums_size = bedpe_entries.size() * 2 * // Two vectors per BEDPE set
-                          matrix_width * sizeof(float); // Elements per vector
+                          matrix_width * 4; // 4 bytes per float
         current_memory += sums_size;
         
         peak_memory = std::max(peak_memory, current_memory);
@@ -220,8 +218,8 @@ struct RegionsOfInterest {
         : resolution(res), window(win), isInter(inter) {
         // Pre-reserve space for better performance
         for (const auto& entry : bedpe_entries) {
-            rowIndices[entry.chrom1].reserve(getChromBins(entry.chrom1, resolution));
-            colIndices[entry.chrom2].reserve(getChromBins(entry.chrom2, resolution));
+            rowIndices[entry.chrom1].reserve(detail::getChromBins(entry.chrom1, resolution));
+            colIndices[entry.chrom2].reserve(detail::getChromBins(entry.chrom2, resolution));
         }
 
         for (const auto& entry : bedpe_entries) {
@@ -365,10 +363,10 @@ struct CoverageVectors {
     void add(const std::string& chrom, int32_t bin, float value) {
         auto& vec = vectors[chrom];
         if (vec.empty()) {
-            vec.resize(getChromBins(chrom, resolution), 0.0f);
+            vec.resize(detail::getChromBins(chrom, resolution), 0.0f);
         }
         if (static_cast<size_t>(bin) >= vec.size()) {
-            size_t new_size = getChromBins(chrom, resolution);
+            size_t new_size = detail::getChromBins(chrom, resolution);
             vec.resize(new_size, 0.0f);
         }
         vec[bin] += value;
