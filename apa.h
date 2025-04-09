@@ -16,13 +16,12 @@
 #include <iomanip>
 
 // Forward declarations
-struct BedpeEntry;
 struct RegionsOfInterest;
 struct LoopIndex;
 struct APAMatrix;
 struct CoverageVectors;
 
-namespace {
+namespace detail {
     // Default chromosome sizes (in bp)
     const std::unordered_map<std::string, int64_t> DEFAULT_CHROM_SIZES = {
         {"chr1", 248956422}, {"chr2", 242193529}, {"chr3", 198295559},
@@ -92,8 +91,8 @@ namespace {
         loop_index_size += chrom_pairs * (
             64 + // ChromPair (2 strings, 32 bytes each)
             48 + // std::map overhead
-            // Estimate bin groups per chrom pair
-            (DEFAULT_CHROM_SIZES.at("chr1") / (1000 * LoopIndex::BIN_GROUP_SIZE)) * 24 // vector overhead
+            // Estimate bin groups per chrom pair: chr1 size = 248956422
+            (248956422 / 1000000) * 24 // vector overhead, using 1M as bin group size (1000 * 1000)
         );
         current_memory += loop_index_size;
         
@@ -166,15 +165,6 @@ namespace {
 }
 
 // Define structures first
-struct BedpeEntry {
-    std::string chrom1;
-    long start1;
-    long end1;
-    std::string chrom2;
-    long start2;
-    long end2;
-};
-
 struct LoopInfo {
     std::string chrom1;
     std::string chrom2;
