@@ -1,7 +1,7 @@
 #!/bin/bash
 
-# Compile with C++11 support and all necessary warnings
-g++ -std=c++11 -Wall -Wextra -o apa4 main.cpp apa.cpp bedpe_builder.cpp -lz
+# Compile with C++11 support, OpenMP, and all necessary warnings
+g++ -std=c++11 -Wall -Wextra -fopenmp -D_GLIBCXX_PARALLEL -o apa4 main.cpp apa.cpp bedpe_builder.cpp -lz
 
 # Example usage:
 # ./apa4 intra 5000 50000 100 data.hicslice forward.bed reverse.bed output.txt

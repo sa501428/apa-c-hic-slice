@@ -5,6 +5,7 @@
 #include <fstream>
 #include <stdexcept>
 #include <cstdint>
+#include <omp.h>
 
 // APA4 Aggregate Peak Analysis
 // first generate a bedpe file of all potential loop locations from bed files
@@ -89,22 +90,32 @@ int main(int argc, char* argv[]) {
             bedpe_sets.push_back(set);
         }
 
-        // Process each BEDPE set to generate entries
+        // Process each BEDPE set to generate entries in parallel
         std::cout << "Processing " << bedpe_sets.size() << " BEDPE sets..." << std::endl;
-        std::vector<std::vector<BedpeEntry>> all_bedpe_entries;
-        for (const auto& set : bedpe_sets) {
-            std::cout << "Loading BED files: " << set.forward_bed << " and " << set.reverse_bed << std::endl;
+        std::vector<std::vector<BedpeEntry>> all_bedpe_entries(bedpe_sets.size());
+        
+        #pragma omp parallel for schedule(dynamic)
+        for (size_t i = 0; i < bedpe_sets.size(); i++) {
+            const auto& set = bedpe_sets[i];
+            #pragma omp critical
+            {
+                std::cout << "Loading BED files: " << set.forward_bed << " and " << set.reverse_bed << std::endl;
+            }
             BedpeBuilder builder(set.forward_bed, set.reverse_bed, min_dist, max_dist, isInter);
-            all_bedpe_entries.push_back(builder.buildBedpe());
+            all_bedpe_entries[i] = builder.buildBedpe();
         }
 
         std::cout << "Processing slice file: " << slice_file << std::endl;
         auto matrices = processSliceFile(slice_file, all_bedpe_entries, 
                                        window_size, isInter, min_dist, max_dist);
 
-        // Save all matrices
+        // Save all matrices in parallel
+        #pragma omp parallel for schedule(dynamic)
         for (size_t i = 0; i < matrices.size(); i++) {
-            std::cout << "Saving matrix to: " << bedpe_sets[i].output_file << std::endl;
+            #pragma omp critical
+            {
+                std::cout << "Saving matrix to: " << bedpe_sets[i].output_file << std::endl;
+            }
             matrices[i].save(bedpe_sets[i].output_file);
         }
         

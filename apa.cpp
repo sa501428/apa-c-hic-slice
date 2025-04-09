@@ -8,6 +8,7 @@
 #include <iomanip>
 #include <algorithm>
 #include <iostream>
+#include <omp.h>
 
 void APAMatrix::save(const std::string& filename) const {
     std::ofstream out(filename);
@@ -46,13 +47,21 @@ std::vector<APAMatrix> processSliceFile(
     std::vector<std::vector<float>> all_rowSums;
     std::vector<std::vector<float>> all_colSums;
 
-    // Initialize data structures for each BEDPE set
-    for (const auto& bedpe_entries : all_bedpe_entries) {
-        all_matrices.emplace_back(window_size * 2 + 1);
-        all_roi.emplace_back(bedpe_entries, resolution, window_size, isInter);
-        all_indices.emplace_back(bedpe_entries, resolution);
-        all_rowSums.emplace_back(window_size * 2 + 1, 0.0f);
-        all_colSums.emplace_back(window_size * 2 + 1, 0.0f);
+    // Initialize data structures for each BEDPE set in parallel
+    size_t num_bedpes = all_bedpe_entries.size();
+    all_matrices.resize(num_bedpes);
+    all_roi.resize(num_bedpes);
+    all_indices.resize(num_bedpes);
+    all_rowSums.resize(num_bedpes);
+    all_colSums.resize(num_bedpes);
+
+    #pragma omp parallel for schedule(dynamic)
+    for (size_t i = 0; i < num_bedpes; i++) {
+        all_matrices[i] = APAMatrix(window_size * 2 + 1);
+        all_roi[i] = RegionsOfInterest(all_bedpe_entries[i], resolution, window_size, isInter);
+        all_indices[i] = LoopIndex(all_bedpe_entries[i], resolution);
+        all_rowSums[i].resize(window_size * 2 + 1, 0.0f);
+        all_colSums[i].resize(window_size * 2 + 1, 0.0f);
     }
 
     // Try opening as uncompressed first
@@ -214,7 +223,8 @@ std::vector<APAMatrix> processSliceFile(
                 }
             }
 
-            // Process for each BEDPE set
+            // Process for each BEDPE set in parallel
+            #pragma omp parallel for schedule(dynamic)
             for (size_t bedpe_idx = 0; bedpe_idx < all_bedpe_entries.size(); bedpe_idx++) {
                 if (all_roi[bedpe_idx].probablyContainsRecord(chr1, chr2, record.binX, record.binY)) {
                     auto nearby_loops = all_indices[bedpe_idx].getNearbyLoops(chr1, chr2, record.binX);
@@ -237,7 +247,10 @@ std::vector<APAMatrix> processSliceFile(
                             // Calculate relative position and add to matrix
                             int relX = record.binX - (loopCenterX - window_size);
                             int relY = record.binY - (loopCenterY - window_size);
-                            all_matrices[bedpe_idx].add(relX, relY, record.value);
+                            #pragma omp critical
+                            {
+                                all_matrices[bedpe_idx].add(relX, relY, record.value);
+                            }
                         }
                     }
                 }
@@ -249,6 +262,7 @@ std::vector<APAMatrix> processSliceFile(
         
         std::cout << "Calculating coverage normalization..." << std::endl;
         // After processing all contacts, normalize each matrix
+        #pragma omp parallel for schedule(dynamic)
         for (size_t bedpe_idx = 0; bedpe_idx < all_matrices.size(); bedpe_idx++) {
             // Calculate row and column sums for this matrix
             for (const auto& loop : all_bedpe_entries[bedpe_idx]) {
