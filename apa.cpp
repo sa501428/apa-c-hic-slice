@@ -28,11 +28,14 @@ void APAMatrix::save(const std::string& filename) const {
 
 std::vector<APAMatrix> processSliceFile(
     const std::string& slice_file,
-    const std::vector<std::vector<BedpeEntry>>& all_bedpe_entries,
+    const std::vector<std::vector<BedpeEntry>>& all_bedpe_entries_const,
     int window_size,
     bool isInter,
     long min_genome_dist,
     long max_genome_dist) {
+    
+    // Make a copy we can modify
+    auto all_bedpe_entries = all_bedpe_entries_const;
     
     std::cout << "Opening slice file..." << std::endl;
     if (window_size <= 0) {
@@ -281,12 +284,16 @@ std::vector<APAMatrix> processSliceFile(
         // After processing all contacts, normalize each matrix
         for (size_t bedpe_idx = 0; bedpe_idx < all_matrices.size(); bedpe_idx++) {
             // Calculate row and column sums for this matrix
-            for (const auto& loop : all_roi[bedpe_idx]) {
-                int32_t bin1Start = ((loop.start1 + loop.end1) / 2) / resolution - window_size;
-                int32_t bin2Start = ((loop.start2 + loop.end2) / 2) / resolution - window_size;
-                
-                coverage.addLocalSums(all_rowSums[bedpe_idx], loop.chrom1, bin1Start);
-                coverage.addLocalSums(all_colSums[bedpe_idx], loop.chrom2, bin2Start);
+            for (const auto& chrom_pair : all_indices[bedpe_idx].loops) {
+                for (const auto& bin_group : chrom_pair.second) {
+                    for (const auto& loop : bin_group.second) {
+                        int32_t bin1Start = ((loop.start1 + loop.end1) / 2) / resolution - window_size;
+                        int32_t bin2Start = ((loop.start2 + loop.end2) / 2) / resolution - window_size;
+                        
+                        coverage.addLocalSums(all_rowSums[bedpe_idx], loop.chrom1, bin1Start);
+                        coverage.addLocalSums(all_colSums[bedpe_idx], loop.chrom2, bin2Start);
+                    }
+                }
             }
 
             // Scale sums and normalize matrix

@@ -167,19 +167,52 @@ namespace {
     }
 }
 
+// Define structures first
+struct BedpeEntry {
+    std::string chrom1;
+    long start1;
+    long end1;
+    std::string chrom2;
+    long start2;
+    long end2;
+};
+
+struct LoopInfo {
+    std::string chrom1;
+    std::string chrom2;
+    int32_t start1;
+    int32_t end1;
+    int32_t start2;
+    int32_t end2;
+    
+    LoopInfo(const BedpeEntry& entry) 
+        : chrom1(entry.chrom1), chrom2(entry.chrom2),
+          start1(entry.start1), end1(entry.end1),
+          start2(entry.start2), end2(entry.end2) {}
+};
+
+struct ChromPair {
+    std::string chrom1;
+    std::string chrom2;
+    
+    bool operator<(const ChromPair& other) const {
+        if (chrom1 != other.chrom1) return chrom1 < other.chrom1;
+        return chrom2 < other.chrom2;
+    }
+};
+
 // Structure to hold binned regions for faster lookup
 struct BinRegion {
     int32_t start;
     int32_t end;
 };
 
-// Structure to hold possible bin positions for quick filtering
 struct RegionsOfInterest {
-    std::unordered_map<std::string, std::unordered_set<int32_t>> rowIndices;  // chrom -> set of binX
-    std::unordered_map<std::string, std::unordered_set<int32_t>> colIndices;  // chrom -> set of binY
+    std::unordered_map<std::string, std::unordered_set<int32_t>> rowIndices;
+    std::unordered_map<std::string, std::unordered_set<int32_t>> colIndices;
     int32_t resolution;
     int32_t window;
-    bool isInter;  // true for inter-chromosomal, false for intra-chromosomal
+    bool isInter;
 
     RegionsOfInterest(const std::vector<BedpeEntry>& bedpe_entries, 
                      int32_t res, int32_t win,
@@ -222,6 +255,42 @@ struct RegionsOfInterest {
         auto colIt = colIndices.find(chr2);
         return rowIt != rowIndices.end() && colIt != colIndices.end() &&
                rowIt->second.count(binX) && colIt->second.count(binY);
+    }
+};
+
+struct LoopIndex {
+    static const int32_t BIN_GROUP_SIZE = 1000;
+    std::map<ChromPair, std::map<int32_t, std::vector<LoopInfo>>> loops;
+    int32_t resolution;
+    
+    LoopIndex(const std::vector<BedpeEntry>& bedpe_entries, int32_t res) : resolution(res) {
+        for (const auto& loop : bedpe_entries) {
+            ChromPair chrom_pair{loop.chrom1, loop.chrom2};
+            int32_t mid_bin = ((loop.start1 + loop.end1) / 2) / resolution;
+            int32_t bin_group = mid_bin / BIN_GROUP_SIZE;
+            loops[chrom_pair][bin_group].emplace_back(loop);
+        }
+    }
+    
+    std::vector<const LoopInfo*> getNearbyLoops(const std::string& chr1, const std::string& chr2, 
+                                               int32_t binX) const {
+        ChromPair chrom_pair{chr1, chr2};
+        auto chrom_it = loops.find(chrom_pair);
+        if (chrom_it == loops.end()) return {};
+        
+        int32_t bin_group = binX / BIN_GROUP_SIZE;
+        std::vector<const LoopInfo*> nearby_loops;
+        nearby_loops.reserve(10);
+        
+        for (int32_t i = -1; i <= 1; i++) {
+            auto group_it = chrom_it->second.find(bin_group + i);
+            if (group_it != chrom_it->second.end()) {
+                for (const auto& loop : group_it->second) {
+                    nearby_loops.push_back(&loop);
+                }
+            }
+        }
+        return nearby_loops;
     }
 };
 
@@ -318,69 +387,6 @@ struct CoverageVectors {
             }
         }
     }
-};
-
-// Add this structure to help with loop lookup
-struct ChromPair {
-    std::string chrom1;
-    std::string chrom2;
-    
-    bool operator<(const ChromPair& other) const {
-        if (chrom1 != other.chrom1) return chrom1 < other.chrom1;
-        return chrom2 < other.chrom2;
-    }
-};
-
-// Structure to hold preprocessed loops for fast lookup
-struct LoopIndex {
-    static const int32_t BIN_GROUP_SIZE = 1000;
-    std::map<ChromPair, std::map<int32_t, std::vector<LoopInfo>>> loops;
-    int32_t resolution;
-    
-    LoopIndex(const std::vector<BedpeEntry>& bedpe_entries, int32_t res) : resolution(res) {
-        for (const auto& loop : bedpe_entries) {
-            ChromPair chrom_pair{loop.chrom1, loop.chrom2};
-            int32_t mid_bin = ((loop.start1 + loop.end1) / 2) / resolution;
-            int32_t bin_group = mid_bin / BIN_GROUP_SIZE;
-            loops[chrom_pair][bin_group].emplace_back(loop);
-        }
-    }
-    
-    std::vector<const LoopInfo*> getNearbyLoops(const std::string& chr1, const std::string& chr2, 
-                                               int32_t binX) const {
-        ChromPair chrom_pair{chr1, chr2};
-        auto chrom_it = loops.find(chrom_pair);
-        if (chrom_it == loops.end()) return {};
-        
-        int32_t bin_group = binX / BIN_GROUP_SIZE;
-        std::vector<const LoopInfo*> nearby_loops;
-        nearby_loops.reserve(10);
-        
-        for (int32_t i = -1; i <= 1; i++) {
-            auto group_it = chrom_it->second.find(bin_group + i);
-            if (group_it != chrom_it->second.end()) {
-                for (const auto& loop : group_it->second) {
-                    nearby_loops.push_back(&loop);
-                }
-            }
-        }
-        return nearby_loops;
-    }
-};
-
-// Add this structure before LoopIndex
-struct LoopInfo {
-    std::string chrom1;
-    std::string chrom2;
-    int32_t start1;
-    int32_t end1;
-    int32_t start2;
-    int32_t end2;
-    
-    LoopInfo(const BedpeEntry& entry) 
-        : chrom1(entry.chrom1), chrom2(entry.chrom2),
-          start1(entry.start1), end1(entry.end1),
-          start2(entry.start2), end2(entry.end2) {}
 };
 
 // Update function declaration
