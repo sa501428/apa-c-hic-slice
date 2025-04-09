@@ -13,6 +13,33 @@
 #include <algorithm>
 #include <map>
 
+// Add after existing includes
+#include <unordered_map>
+
+// Add before the RegionsOfInterest struct
+namespace {
+    // Default chromosome sizes (in bp)
+    const std::unordered_map<std::string, int64_t> DEFAULT_CHROM_SIZES = {
+        {"chr1", 248956422}, {"chr2", 242193529}, {"chr3", 198295559},
+        {"chr4", 190214555}, {"chr5", 181538259}, {"chr6", 170805979},
+        {"chr7", 159345973}, {"chrX", 156040895}, {"chr8", 145138636},
+        {"chr9", 138394717}, {"chr11", 135086622}, {"chr10", 133797422},
+        {"chr12", 133275309}, {"chr13", 114364328}, {"chr14", 107043718},
+        {"chr15", 101991189}, {"chr16", 90338345}, {"chr17", 83257441},
+        {"chr18", 80373285}, {"chr20", 64444167}, {"chr19", 58617616},
+        {"chrY", 57227415}, {"chr22", 50818468}, {"chr21", 46709983}
+    };
+
+    // Calculate number of bins for a chromosome at given resolution
+    inline int32_t getChromBins(const std::string& chrom, int32_t resolution) {
+        auto it = DEFAULT_CHROM_SIZES.find(chrom);
+        if (it != DEFAULT_CHROM_SIZES.end()) {
+            return (it->second / resolution) + 1;
+        }
+        return 20000000 / resolution; // Default fallback size
+    }
+}
+
 // Structure to hold binned regions for faster lookup
 struct BinRegion {
     int32_t start;
@@ -33,8 +60,8 @@ struct RegionsOfInterest {
         : resolution(res), window(win), isInter(inter) {
         // Pre-reserve space for better performance
         for (const auto& entry : bedpe_entries) {
-            rowIndices[entry.chrom1].reserve(1000000);  // Reserve space for ~1M bins
-            colIndices[entry.chrom2].reserve(1000000);  // Reserve space for ~1M bins
+            rowIndices[entry.chrom1].reserve(getChromBins(entry.chrom1, resolution));
+            colIndices[entry.chrom2].reserve(getChromBins(entry.chrom2, resolution));
         }
 
         for (const auto& entry : bedpe_entries) {
@@ -135,27 +162,17 @@ struct APAMatrix {
 // Structure to hold coverage vectors
 struct CoverageVectors {
     std::unordered_map<std::string, std::vector<float>> vectors;  // chrom -> coverage vector
-    static const int32_t INITIAL_SIZE = 20000000;  // 20Mb
-    static const int32_t MAX_SIZE = 25000000;      // Absolute maximum size
     int32_t resolution;
     
     CoverageVectors(int32_t res) : resolution(res) {}
     
     void add(const std::string& chrom, int32_t bin, float value) {
-        if (bin >= MAX_SIZE) {
-            std::cerr << "Warning: bin " << bin << " is beyond max size " << MAX_SIZE << std::endl;
-            return;
-        }
-        
         auto& vec = vectors[chrom];
         if (vec.empty()) {
-            vec.resize(INITIAL_SIZE / resolution, 0.0f);
+            vec.resize(getChromBins(chrom, resolution), 0.0f);
         }
         if (static_cast<size_t>(bin) >= vec.size()) {
-            size_t new_size = std::min(
-                static_cast<size_t>(MAX_SIZE),
-                std::max(vec.size() * 2, static_cast<size_t>(bin * 2))
-            );
+            size_t new_size = getChromBins(chrom, resolution);
             vec.resize(new_size, 0.0f);
         }
         vec[bin] += value;

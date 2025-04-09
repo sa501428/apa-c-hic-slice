@@ -54,6 +54,8 @@ std::vector<APAMatrix> processSliceFile(
         is_compressed = true;
     }
 
+    std::cout << "File opened..." << std::endl;
+
     try {
         // Read and verify magic string
         char magic[8];
@@ -83,6 +85,8 @@ std::vector<APAMatrix> processSliceFile(
             throw std::runtime_error("Invalid resolution in slice file");
         }
 
+        std::cout << "Resolution is " << resolution << std::endl;
+
         // Create vectors to hold per-bedpe data structures
         size_t num_bedpes = all_bedpe_entries.size();
         std::vector<RegionsOfInterest> all_roi;
@@ -96,17 +100,15 @@ std::vector<APAMatrix> processSliceFile(
         all_roi.reserve(num_bedpes);
         all_indices.reserve(num_bedpes);
 
-        #pragma omp parallel for schedule(dynamic)
         for (size_t i = 0; i < num_bedpes; i++) {
-            #pragma omp critical
-            {
-                all_matrices.push_back(APAMatrix(window_size * 2 + 1));
-                all_roi.push_back(RegionsOfInterest(all_bedpe_entries[i], resolution, window_size, isInter));
-                all_indices.push_back(LoopIndex(all_bedpe_entries[i], resolution));
-            }
+            all_matrices.push_back(APAMatrix(window_size * 2 + 1));
+            all_roi.push_back(RegionsOfInterest(all_bedpe_entries[i], resolution, window_size, isInter));
+            all_indices.push_back(LoopIndex(all_bedpe_entries[i], resolution));
             all_rowSums[i].resize(window_size * 2 + 1, 0.0f);
             all_colSums[i].resize(window_size * 2 + 1, 0.0f);
         }
+
+        std::cout << "Data structures initialized..." << std::endl;
 
         // Read chromosome mapping
         int32_t numChromosomes;
@@ -124,7 +126,6 @@ std::vector<APAMatrix> processSliceFile(
             throw std::runtime_error("Invalid number of chromosomes in slice file");
         }
 
-        std::cout << "Resolution: " << resolution << " bp" << std::endl;
         std::cout << "Number of chromosomes: " << numChromosomes << std::endl;
 
         std::map<int16_t, std::string> chromosomeKeyToName;
@@ -164,6 +165,7 @@ std::vector<APAMatrix> processSliceFile(
             }
 
             chromosomeKeyToName[key] = chromosomeName;
+            std::cout << "Read chromosome: " << chromosomeName << " (key=" << key << ")" << std::endl;
         }
 
         // Create single coverage vectors instance (shared across all BEDPEs)
@@ -186,8 +188,15 @@ std::vector<APAMatrix> processSliceFile(
                 (gzread(gz_file, &record, record_size) == record_size) :
                 (fread(&record, record_size, 1, raw_file) == 1))) {
             contact_count++;
-            if ((contact_count % 10000000) == 0) {
-                std::cout << "." << std::flush;
+            
+            // Print first two records for debugging
+            if (contact_count <= 2) {
+                std::string chr1 = chromosomeKeyToName[record.chr1Key];
+                std::string chr2 = chromosomeKeyToName[record.chr2Key];
+                std::cout << "Contact " << contact_count << ": " 
+                         << chr1 << ":" << record.binX << " - "
+                         << chr2 << ":" << record.binY 
+                         << " value=" << record.value << std::endl;
             }
 
             if (std::isnan(record.value) || std::isinf(record.value) || record.value <= 0) {
