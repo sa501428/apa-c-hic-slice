@@ -40,30 +40,6 @@ std::vector<APAMatrix> processSliceFile(
         throw std::runtime_error("Window size must be positive");
     }
 
-    // Create vectors to hold per-bedpe data structures
-    std::vector<RegionsOfInterest> all_roi;
-    std::vector<APAMatrix> all_matrices;
-    std::vector<LoopIndex> all_indices;
-    std::vector<std::vector<float>> all_rowSums;
-    std::vector<std::vector<float>> all_colSums;
-
-    // Initialize data structures for each BEDPE set in parallel
-    size_t num_bedpes = all_bedpe_entries.size();
-    all_matrices.resize(num_bedpes);
-    all_roi.resize(num_bedpes);
-    all_indices.resize(num_bedpes);
-    all_rowSums.resize(num_bedpes);
-    all_colSums.resize(num_bedpes);
-
-    #pragma omp parallel for schedule(dynamic)
-    for (size_t i = 0; i < num_bedpes; i++) {
-        all_matrices[i] = APAMatrix(window_size * 2 + 1);
-        all_roi[i] = RegionsOfInterest(all_bedpe_entries[i], resolution, window_size, isInter);
-        all_indices[i] = LoopIndex(all_bedpe_entries[i], resolution);
-        all_rowSums[i].resize(window_size * 2 + 1, 0.0f);
-        all_colSums[i].resize(window_size * 2 + 1, 0.0f);
-    }
-
     // Try opening as uncompressed first
     FILE* raw_file = fopen(slice_file.c_str(), "rb");
     gzFile gz_file = nullptr;
@@ -79,7 +55,6 @@ std::vector<APAMatrix> processSliceFile(
     }
 
     try {
-        std::cout << "Reading header..." << std::endl;
         // Read and verify magic string
         char magic[8];
         if (is_compressed) {
@@ -106,6 +81,31 @@ std::vector<APAMatrix> processSliceFile(
 
         if (resolution <= 0) {
             throw std::runtime_error("Invalid resolution in slice file");
+        }
+
+        // Create vectors to hold per-bedpe data structures
+        size_t num_bedpes = all_bedpe_entries.size();
+        std::vector<RegionsOfInterest> all_roi;
+        std::vector<APAMatrix> all_matrices;
+        std::vector<LoopIndex> all_indices;
+        std::vector<std::vector<float>> all_rowSums(num_bedpes);
+        std::vector<std::vector<float>> all_colSums(num_bedpes);
+
+        // Initialize data structures for each BEDPE set
+        all_matrices.reserve(num_bedpes);
+        all_roi.reserve(num_bedpes);
+        all_indices.reserve(num_bedpes);
+
+        #pragma omp parallel for schedule(dynamic)
+        for (size_t i = 0; i < num_bedpes; i++) {
+            #pragma omp critical
+            {
+                all_matrices.push_back(APAMatrix(window_size * 2 + 1));
+                all_roi.push_back(RegionsOfInterest(all_bedpe_entries[i], resolution, window_size, isInter));
+                all_indices.push_back(LoopIndex(all_bedpe_entries[i], resolution));
+            }
+            all_rowSums[i].resize(window_size * 2 + 1, 0.0f);
+            all_colSums[i].resize(window_size * 2 + 1, 0.0f);
         }
 
         // Read chromosome mapping
