@@ -38,24 +38,44 @@ APAMatrix processSliceFile(const std::string& slice_file,
         throw std::runtime_error("Window size must be positive");
     }
 
-    // Open slice file
-    gzFile file = gzopen(slice_file.c_str(), "rb");
-    if (!file) {
-        throw std::runtime_error("Could not open file: " + slice_file);
+    // Try opening as uncompressed first
+    FILE* raw_file = fopen(slice_file.c_str(), "rb");
+    gzFile gz_file = nullptr;
+    bool is_compressed = false;
+
+    if (!raw_file) {
+        // Try opening as compressed
+        gz_file = gzopen(slice_file.c_str(), "rb");
+        if (!gz_file) {
+            throw std::runtime_error("Could not open file: " + slice_file);
+        }
+        is_compressed = true;
     }
 
     try {
         std::cout << "Reading header..." << std::endl;
         // Read and verify magic string
         char magic[8];
-        if (gzread(file, magic, 8) != 8 || strncmp(magic, "HICSLICE", 8) != 0) {
-            throw std::runtime_error("Invalid file format: missing magic string");
+        if (is_compressed) {
+            if (gzread(gz_file, magic, 8) != 8 || strncmp(magic, "HICSLICE", 8) != 0) {
+                throw std::runtime_error("Invalid file format: missing magic string");
+            }
+        } else {
+            if (fread(magic, 1, 8, raw_file) != 8 || strncmp(magic, "HICSLICE", 8) != 0) {
+                throw std::runtime_error("Invalid file format: missing magic string");
+            }
         }
 
         // Read resolution
         int32_t resolution;
-        if (gzread(file, &resolution, sizeof(int32_t)) != sizeof(int32_t)) {
-            throw std::runtime_error("Failed to read resolution");
+        if (is_compressed) {
+            if (gzread(gz_file, &resolution, sizeof(int32_t)) != sizeof(int32_t)) {
+                throw std::runtime_error("Failed to read resolution");
+            }
+        } else {
+            if (fread(&resolution, sizeof(int32_t), 1, raw_file) != 1) {
+                throw std::runtime_error("Failed to read resolution");
+            }
         }
 
         if (resolution <= 0) {
@@ -64,8 +84,14 @@ APAMatrix processSliceFile(const std::string& slice_file,
 
         // Read chromosome mapping
         int32_t numChromosomes;
-        if (gzread(file, &numChromosomes, sizeof(int32_t)) != sizeof(int32_t)) {
-            throw std::runtime_error("Failed to read chromosome count");
+        if (is_compressed) {
+            if (gzread(gz_file, &numChromosomes, sizeof(int32_t)) != sizeof(int32_t)) {
+                throw std::runtime_error("Failed to read chromosome count");
+            }
+        } else {
+            if (fread(&numChromosomes, sizeof(int32_t), 1, raw_file) != 1) {
+                throw std::runtime_error("Failed to read chromosome count");
+            }
         }
 
         if (numChromosomes <= 0) {
@@ -78,26 +104,44 @@ APAMatrix processSliceFile(const std::string& slice_file,
         std::map<int16_t, std::string> chromosomeKeyToName;
         for (int i = 0; i < numChromosomes; i++) {
             int32_t nameLength;
-            if (gzread(file, &nameLength, sizeof(int32_t)) != sizeof(int32_t)) {
-                throw std::runtime_error("Failed to read chromosome name length");
+            if (is_compressed) {
+                if (gzread(gz_file, &nameLength, sizeof(int32_t)) != sizeof(int32_t)) {
+                    throw std::runtime_error("Failed to read chromosome name length");
+                }
+            } else {
+                if (fread(&nameLength, sizeof(int32_t), 1, raw_file) != 1) {
+                    throw std::runtime_error("Failed to read chromosome name length");
+                }
             }
 
             std::vector<char> nameBuffer(nameLength + 1, 0);
-            if (gzread(file, nameBuffer.data(), nameLength) != nameLength) {
-                throw std::runtime_error("Failed to read chromosome name");
+            if (is_compressed) {
+                if (gzread(gz_file, nameBuffer.data(), nameLength) != nameLength) {
+                    throw std::runtime_error("Failed to read chromosome name");
+                }
+            } else {
+                if (fread(nameBuffer.data(), 1, nameLength, raw_file) != (size_t)nameLength) {
+                    throw std::runtime_error("Failed to read chromosome name");
+                }
             }
             std::string chromosomeName(nameBuffer.data());
 
             int16_t key;
-            if (gzread(file, &key, sizeof(int16_t)) != sizeof(int16_t)) {
-                throw std::runtime_error("Failed to read chromosome key");
+            if (is_compressed) {
+                if (gzread(gz_file, &key, sizeof(int16_t)) != sizeof(int16_t)) {
+                    throw std::runtime_error("Failed to read chromosome key");
+                }
+            } else {
+                if (fread(&key, sizeof(int16_t), 1, raw_file) != 1) {
+                    throw std::runtime_error("Failed to read chromosome key");
+                }
             }
 
             chromosomeKeyToName[key] = chromosomeName;
         }
 
         // Create coverage vectors and APA matrix
-        CoverageVectors coverage(resolution);  // Pass resolution to constructor
+        CoverageVectors coverage(resolution);
         RegionsOfInterest roi(bedpe_entries, resolution, window_size, isInter);
         APAMatrix apaMatrix(window_size * 2 + 1);
 
@@ -116,9 +160,12 @@ APAMatrix processSliceFile(const std::string& slice_file,
         std::cout << "Processing contacts..." << std::endl;
         int64_t contact_count = 0;
 
-        while (gzread(file, &record, sizeof(record)) == sizeof(record)) {
+        size_t record_size = sizeof(record);
+        while ((is_compressed ? 
+                (gzread(gz_file, &record, record_size) == record_size) :
+                (fread(&record, record_size, 1, raw_file) == 1))) {
             contact_count++;
-            if ((contact_count % 1000000) == 0) {
+            if ((contact_count % 10000000) == 0) {
                 std::cout << "." << std::flush;
             }
 
@@ -215,11 +262,20 @@ APAMatrix processSliceFile(const std::string& slice_file,
         std::cout << "Saving matrix to: " << output_file << std::endl;
         apaMatrix.save(output_file);
         
+        if (is_compressed) {
+            gzclose(gz_file);
+        } else {
+            fclose(raw_file);
+        }
+        
         return apaMatrix;
 
     } catch (const std::exception& e) {
-        std::cerr << "Error processing slice file: " << e.what() << std::endl;
-        gzclose(file);
+        if (is_compressed && gz_file) {
+            gzclose(gz_file);
+        } else if (!is_compressed && raw_file) {
+            fclose(raw_file);
+        }
         throw;
     }
 }
