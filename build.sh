@@ -4,7 +4,6 @@
 g++ -std=c++11 -Wall -Wextra -o apa4 main.cpp apa.cpp bedpe_builder.cpp -lz
 
 # Example usage:
-# ./apa4 forward.bed reverse.bed 5000 50000 data.hicslice
-# ./apa4 -both-intra-inter forward.bed reverse.bed 5000 50000 data.hicslice
-# ./apa4 -only-inter forward.bed reverse.bed 5000 50000 data.hicslice
+# ./apa4 intra 5000 50000 100 data.hicslice forward.bed reverse.bed output.txt
+# ./apa4 inter 0 0 100 data.hicslice forward.bed reverse.bed output.txt
 

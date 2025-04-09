@@ -12,14 +12,18 @@
 // add up the total counts for all reads that overlap a loop
 // output the total counts
 void printUsage() {
-    std::cout << "Usage: apa4 [-only-inter] <forward.bed> <reverse.bed> "
-              << "<min_genome_dist> <max_genome_dist> <hic_slice_file> <output.txt> [window_size]\n"
+    std::cout << "Usage: apa4 <inter|intra> <min_genome_dist> <max_genome_dist> <window_size> "
+              << "<hic_slice_file> <forward.bed> <reverse.bed> <output.txt>\n"
               << "\tCreate potential loop locations using the anchors\n"
-              << "\t\tDefault is intra-chromosomal features\n"
-              << "\t\tUse -only-inter for inter-chromosomal features\n"
-              << "\t\t<hic_slice_file> is the path to the HiC slice file\n"
-              << "\t\t<output.txt> is the path to the output file\n"
-              << "\t\t[window_size] optional window size around loop (default: 10)\n";
+              << "\t\t'inter' for inter-chromosomal features\n"
+              << "\t\t'intra' for intra-chromosomal features\n"
+              << "\t\t<min_genome_dist> minimum genomic distance for loops\n"
+              << "\t\t<max_genome_dist> maximum genomic distance for loops\n"
+              << "\t\t<window_size> window size around loop\n"
+              << "\t\t<hic_slice_file> path to the HiC slice file\n"
+              << "\t\t<forward.bed> path to forward BED file\n"
+              << "\t\t<reverse.bed> path to reverse BED file\n"
+              << "\t\t<output.txt> path to the output file\n";
 }
 
 bool fileExists(const std::string& filename) {
@@ -29,28 +33,38 @@ bool fileExists(const std::string& filename) {
 
 int main(int argc, char* argv[]) {
     try {
-        int argOffset = 1;
-        bool isInter = false;
-        int window_size = 10;  // default window size
-        
-        if (argc < 6) {
+        if (argc != 9) {
             printUsage();
             return 1;
         }
-        
-        if (std::string(argv[1]) == "-only-inter") {
+
+        // Parse arguments in new order
+        std::string mode = argv[1];
+        bool isInter;
+        if (mode == "inter") {
             isInter = true;
-            argOffset++;
+        } else if (mode == "intra") {
+            isInter = false;
+        } else {
+            throw std::runtime_error("First argument must be either 'inter' or 'intra'");
         }
-        
-        if (argc < (6 + argOffset)) {  // Check we have enough args after option
-            printUsage();
-            return 1;
+
+        long min_dist = std::stol(argv[2]);
+        long max_dist = std::stol(argv[3]);
+        int window_size = std::stoi(argv[4]);
+        std::string slice_file = argv[5];
+        std::string forward_bed = argv[6];
+        std::string reverse_bed = argv[7];
+        std::string output_file = argv[8];
+
+        // Validate parameters
+        if (min_dist < 0 || max_dist < min_dist) {
+            throw std::runtime_error("Invalid distance parameters: min_dist must be >= 0 and max_dist must be >= min_dist");
         }
-        
-        std::string forward_bed = argv[argOffset];
-        std::string reverse_bed = argv[argOffset + 1];
-        
+        if (window_size <= 0) {
+            throw std::runtime_error("Window size must be positive");
+        }
+
         // Check input files exist
         if (!fileExists(forward_bed)) {
             throw std::runtime_error("Forward BED file not found: " + forward_bed);
@@ -58,29 +72,10 @@ int main(int argc, char* argv[]) {
         if (!fileExists(reverse_bed)) {
             throw std::runtime_error("Reverse BED file not found: " + reverse_bed);
         }
-        
-        long min_dist = std::stol(argv[argOffset + 2]);
-        long max_dist = std::stol(argv[argOffset + 3]);
-        
-        if (min_dist < 0 || max_dist < min_dist) {
-            throw std::runtime_error("Invalid distance parameters: min_dist must be >= 0 and max_dist must be >= min_dist");
-        }
-        
-        std::string slice_file = argv[argOffset + 4];
         if (!fileExists(slice_file)) {
             throw std::runtime_error("Slice file not found: " + slice_file);
         }
-        
-        std::string output_file = argv[argOffset + 5];
-        
-        // Optional window size parameter
-        if (argc > (6 + argOffset)) {
-            window_size = std::stoi(argv[argOffset + 6]);
-            if (window_size <= 0) {
-                throw std::runtime_error("Window size must be positive");
-            }
-        }
-        
+
         std::cout << "Loading BED files and generating BEDPE entries..." << std::endl;
         BedpeBuilder builder(forward_bed, reverse_bed, min_dist, max_dist, isInter);
         auto bedpe_entries = builder.buildBedpe();
