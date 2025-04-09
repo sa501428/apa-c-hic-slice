@@ -26,16 +26,33 @@ void APAMatrix::save(const std::string& filename) const {
     }
 }
 
-APAMatrix processSliceFile(const std::string& slice_file, 
-                         const std::vector<BedpeEntry>& bedpe_entries,
-                         const std::string& output_file,
-                         int window_size,
-                         bool isInter,
-                         long min_genome_dist,
-                         long max_genome_dist) {
+std::vector<APAMatrix> processSliceFile(
+    const std::string& slice_file,
+    const std::vector<std::vector<BedpeEntry>>& all_bedpe_entries,
+    int window_size,
+    bool isInter,
+    long min_genome_dist,
+    long max_genome_dist) {
+    
     std::cout << "Opening slice file..." << std::endl;
     if (window_size <= 0) {
         throw std::runtime_error("Window size must be positive");
+    }
+
+    // Create vectors to hold per-bedpe data structures
+    std::vector<RegionsOfInterest> all_roi;
+    std::vector<APAMatrix> all_matrices;
+    std::vector<LoopIndex> all_indices;
+    std::vector<std::vector<float>> all_rowSums;
+    std::vector<std::vector<float>> all_colSums;
+
+    // Initialize data structures for each BEDPE set
+    for (const auto& bedpe_entries : all_bedpe_entries) {
+        all_matrices.emplace_back(window_size * 2 + 1);
+        all_roi.emplace_back(bedpe_entries, resolution, window_size, isInter);
+        all_indices.emplace_back(bedpe_entries, resolution);
+        all_rowSums.emplace_back(window_size * 2 + 1, 0.0f);
+        all_colSums.emplace_back(window_size * 2 + 1, 0.0f);
     }
 
     // Try opening as uncompressed first
@@ -140,13 +157,8 @@ APAMatrix processSliceFile(const std::string& slice_file,
             chromosomeKeyToName[key] = chromosomeName;
         }
 
-        // Create coverage vectors and APA matrix
+        // Create single coverage vectors instance (shared across all BEDPEs)
         CoverageVectors coverage(resolution);
-        RegionsOfInterest roi(bedpe_entries, resolution, window_size, isInter);
-        APAMatrix apaMatrix(window_size * 2 + 1);
-
-        // Create index for fast loop lookup
-        LoopIndex loop_index(bedpe_entries, resolution);
 
         // Single pass: process contacts for both coverage and APA
         struct {
@@ -202,31 +214,31 @@ APAMatrix processSliceFile(const std::string& slice_file,
                 }
             }
 
-            // Quick filter using RegionsOfInterest first
-            if (roi.probablyContainsRecord(chr1, chr2, record.binX, record.binY)) {
-                // Only if it passes the quick filter, get potentially relevant loops
-                auto nearby_loops = loop_index.getNearbyLoops(chr1, chr2, record.binX);
-                
-                // Process only nearby loops
-                for (const auto* loop : nearby_loops) {
-                    // Convert BEDPE coordinates to bin positions
-                    int32_t bin1Start = loop->start1 / resolution;
-                    int32_t bin1End = (loop->end1 / resolution) + 1;
-                    int32_t bin2Start = loop->start2 / resolution;
-                    int32_t bin2End = (loop->end2 / resolution) + 1;
+            // Process for each BEDPE set
+            for (size_t bedpe_idx = 0; bedpe_idx < all_bedpe_entries.size(); bedpe_idx++) {
+                if (all_roi[bedpe_idx].probablyContainsRecord(chr1, chr2, record.binX, record.binY)) {
+                    auto nearby_loops = all_indices[bedpe_idx].getNearbyLoops(chr1, chr2, record.binX);
                     
-                    // Calculate center bin positions
-                    int32_t loopCenterX = (bin1Start + bin1End) / 2;
-                    int32_t loopCenterY = (bin2Start + bin2End) / 2;
-                    
-                    // Only process if contact is within window of loop center
-                    if (std::abs(record.binX - loopCenterX) <= window_size &&
-                        std::abs(record.binY - loopCenterY) <= window_size) {
+                    for (const auto* loop : nearby_loops) {
+                        // Convert BEDPE coordinates to bin positions
+                        int32_t bin1Start = loop->start1 / resolution;
+                        int32_t bin1End = (loop->end1 / resolution) + 1;
+                        int32_t bin2Start = loop->start2 / resolution;
+                        int32_t bin2End = (loop->end2 / resolution) + 1;
                         
-                        // Calculate relative position and add to matrix
-                        int relX = record.binX - (loopCenterX - window_size);
-                        int relY = record.binY - (loopCenterY - window_size);
-                        apaMatrix.add(relX, relY, record.value);
+                        // Calculate center bin positions
+                        int32_t loopCenterX = (bin1Start + bin1End) / 2;
+                        int32_t loopCenterY = (bin2Start + bin2End) / 2;
+                        
+                        // Only process if contact is within window of loop center
+                        if (std::abs(record.binX - loopCenterX) <= window_size &&
+                            std::abs(record.binY - loopCenterY) <= window_size) {
+                            
+                            // Calculate relative position and add to matrix
+                            int relX = record.binX - (loopCenterX - window_size);
+                            int relY = record.binY - (loopCenterY - window_size);
+                            all_matrices[bedpe_idx].add(relX, relY, record.value);
+                        }
                     }
                 }
             }
@@ -236,31 +248,22 @@ APAMatrix processSliceFile(const std::string& slice_file,
         std::cout << "Finished processing " << contact_count << " contacts" << std::endl;
         
         std::cout << "Calculating coverage normalization..." << std::endl;
-        // After processing all contacts, normalize the matrix
-        std::vector<float> rowSums(apaMatrix.width, 0.0f);
-        std::vector<float> colSums(apaMatrix.width, 0.0f);
+        // After processing all contacts, normalize each matrix
+        for (size_t bedpe_idx = 0; bedpe_idx < all_matrices.size(); bedpe_idx++) {
+            // Calculate row and column sums for this matrix
+            for (const auto& loop : all_bedpe_entries[bedpe_idx]) {
+                int32_t bin1Start = ((loop.start1 + loop.end1) / 2) / resolution - window_size;
+                int32_t bin2Start = ((loop.start2 + loop.end2) / 2) / resolution - window_size;
+                
+                coverage.addLocalSums(all_rowSums[bedpe_idx], loop.chrom1, bin1Start);
+                coverage.addLocalSums(all_colSums[bedpe_idx], loop.chrom2, bin2Start);
+            }
 
-        // Calculate row and column sums from coverage vectors
-        for (const auto& loop : bedpe_entries) {
-            // Convert to bin coordinates
-            int32_t bin1Start = ((loop.start1 + loop.end1) / 2) / resolution - window_size;
-            int32_t bin2Start = ((loop.start2 + loop.end2) / 2) / resolution - window_size;
-            
-            // Add local sums from coverage vectors
-            coverage.addLocalSums(rowSums, loop.chrom1, bin1Start);
-            coverage.addLocalSums(colSums, loop.chrom2, bin2Start);
+            // Scale sums and normalize matrix
+            APAMatrix::scaleByAverage(all_rowSums[bedpe_idx]);
+            APAMatrix::scaleByAverage(all_colSums[bedpe_idx]);
+            all_matrices[bedpe_idx].normalize(all_rowSums[bedpe_idx], all_colSums[bedpe_idx]);
         }
-
-        // Scale sums by their averages
-        APAMatrix::scaleByAverage(rowSums);
-        APAMatrix::scaleByAverage(colSums);
-
-        // Normalize the matrix
-        apaMatrix.normalize(rowSums, colSums);
-        
-        std::cout << "Normalizing matrix..." << std::endl;
-        std::cout << "Saving matrix to: " << output_file << std::endl;
-        apaMatrix.save(output_file);
         
         if (is_compressed) {
             gzclose(gz_file);
@@ -268,7 +271,7 @@ APAMatrix processSliceFile(const std::string& slice_file,
             fclose(raw_file);
         }
         
-        return apaMatrix;
+        return all_matrices;
 
     } catch (const std::exception& e) {
         if (is_compressed && gz_file) {

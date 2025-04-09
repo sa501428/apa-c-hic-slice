@@ -234,12 +234,13 @@ struct LoopIndex {
     }
 };
 
-APAMatrix processSliceFile(const std::string& slice_file, 
-                         const std::vector<BedpeEntry>& bedpe_entries,
-                         const std::string& output_file,
-                         int window_size = 10,
-                         bool isInter = false,
-                         long min_genome_dist = 0,    // Add distance parameters
-                         long max_genome_dist = 0);   // for intra filtering
+// Update function declaration
+std::vector<APAMatrix> processSliceFile(
+    const std::string& slice_file, 
+    const std::vector<std::vector<BedpeEntry>>& all_bedpe_entries,
+    int window_size = 10,
+    bool isInter = false,
+    long min_genome_dist = 0,
+    long max_genome_dist = 0);
 
 #endif 
