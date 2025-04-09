@@ -8,7 +8,6 @@
 #include <iomanip>
 #include <algorithm>
 #include <iostream>
-#include <omp.h>
 
 void APAMatrix::save(const std::string& filename) const {
     std::ofstream out(filename);
@@ -185,7 +184,7 @@ std::vector<APAMatrix> processSliceFile(
 
         size_t record_size = sizeof(record);
         while ((is_compressed ? 
-                (gzread(gz_file, &record, record_size) == record_size) :
+                (gzread(gz_file, &record, record_size) == static_cast<int>(record_size)) :
                 (fread(&record, record_size, 1, raw_file) == 1))) {
             contact_count++;
             
@@ -267,7 +266,6 @@ std::vector<APAMatrix> processSliceFile(
         
         std::cout << "Calculating coverage normalization..." << std::endl;
         // After processing all contacts, normalize each matrix
-        #pragma omp parallel for schedule(dynamic)
         for (size_t bedpe_idx = 0; bedpe_idx < all_matrices.size(); bedpe_idx++) {
             // Calculate row and column sums for this matrix
             for (const auto& loop : all_bedpe_entries[bedpe_idx]) {
