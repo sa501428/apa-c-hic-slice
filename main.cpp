@@ -102,7 +102,7 @@ int main(int argc, char* argv[]) {
 
         // After loading all BEDPE entries but before processing
         try {
-            checkMemoryRequirements(all_bedpe_entries, window_size);
+            detail::checkMemoryRequirements(all_bedpe_entries, window_size);
         } catch (const std::runtime_error& e) {
             std::cerr << "Memory check failed: " << e.what() << std::endl;
             return 1;
