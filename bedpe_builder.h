@@ -11,14 +11,14 @@
 
 struct BedEntry {
     std::string chrom;
-    long mid;
+    long gmid;
 };
 
 struct BedpeEntry {
     std::string chrom1;
-    long mid1;
+    long gmid1;
     std::string chrom2;
-    long mid2;
+    long gmid2;
     bool operator<(const BedpeEntry& other) const;
     bool operator==(const BedpeEntry& other) const;
 };

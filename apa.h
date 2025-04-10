@@ -168,15 +168,16 @@ namespace detail {
 struct LoopInfo {
     int16_t chrom1Key;
     int16_t chrom2Key;
-    int32_t mid1;
-    int32_t mid2;
+    int32_t gmid1;
+    int32_t gmid2;
     
     LoopInfo(const BedpeEntry& entry, 
              const std::map<std::string, int16_t>& chromNameToKey) 
         : chrom1Key(chromNameToKey.at(entry.chrom1))
         , chrom2Key(chromNameToKey.at(entry.chrom2))
-        , mid1(entry.mid1)
-        , mid2(entry.mid2) {}
+        , gmid1(entry.gmid1)
+        , gmid2(entry.gmid2)
+        {}
 };
 
 struct ChromPair {
@@ -214,14 +215,8 @@ struct RegionsOfInterest {
 
         for (const auto& entry : bedpe_entries) {
             // Convert BEDPE coordinates to bin positions
-            int32_t bin1Start = entry.start1 / resolution;
-            int32_t bin1End = (entry.end1 / resolution) + 1;  // +1 to include the full range
-            int32_t bin2Start = entry.start2 / resolution;
-            int32_t bin2End = (entry.end2 / resolution) + 1;  // +1 to include the full range
-            
-            // Calculate center positions
-            int32_t centerX = (bin1Start + bin1End) / 2;
-            int32_t centerY = (bin2Start + bin2End) / 2;
+            int32_t centerX = entry.gmid1 / resolution;
+            int32_t centerY = entry.gmid2 / resolution;
             
             // Add all possible bins within window of the loop center
             for (int32_t bin = centerX - win; bin <= centerX + win; bin++) {
@@ -260,7 +255,7 @@ struct LoopIndex {
                 chromNameToKey.at(loop.chrom1),
                 chromNameToKey.at(loop.chrom2)
             };
-            int32_t mid_bin = loop.mid1 / resolution;
+            int32_t mid_bin = loop.gmid1 / resolution;
             int32_t bin_group = mid_bin / BIN_GROUP_SIZE;
             loops[chrom_pair][bin_group].emplace_back(loop, chromNameToKey);
         }
@@ -311,8 +306,7 @@ struct CoverageVectors {
         vec[bin] += value;
     }
 
-    void addLocalSums(std::vector<float>& sums, int16_t chromKey, const std::string& chromName, 
-                     int32_t binStart) const {
+    void addLocalSums(std::vector<float>& sums, int16_t chromKey, int32_t binStart) const {
         auto it = vectors.find(chromKey);
         if (it != vectors.end()) {
             const auto& vec = it->second;

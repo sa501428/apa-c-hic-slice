@@ -28,6 +28,10 @@ std::vector<APAMatrix> processSliceFile(
         throw std::runtime_error("Window size must be positive");
     }
 
+    // Declare chromosome mapping here
+    std::map<int16_t, std::string> chromosomeKeyToName;
+    std::map<std::string, int16_t> chromNameToKey;
+
     // Try opening as uncompressed first
     FILE* raw_file = fopen(slice_file.c_str(), "rb");
     gzFile gz_file = nullptr;
@@ -82,7 +86,6 @@ std::vector<APAMatrix> processSliceFile(
         all_indices.reserve(all_bedpe_entries.size());
 
         // After reading chromosome mapping
-        std::map<std::string, int16_t> chromNameToKey;
         for (const auto& pair : chromosomeKeyToName) {
             chromNameToKey[pair.second] = pair.first;
         }
@@ -132,7 +135,6 @@ std::vector<APAMatrix> processSliceFile(
 
         std::cout << "Number of chromosomes: " << numChromosomes << std::endl;
 
-        std::map<int16_t, std::string> chromosomeKeyToName;
         for (int i = 0; i < numChromosomes; i++) {
             int32_t nameLength;
             if (is_compressed) {
@@ -236,14 +238,14 @@ std::vector<APAMatrix> processSliceFile(
                 if (all_roi[bedpe_idx].probablyContainsRecord(chr1, chr2, record.binX, record.binY)) {
                     auto nearby_loops = all_indices[bedpe_idx].getNearbyLoops(record.chr1Key, record.chr2Key, record.binX);
                     for (const auto* loop : nearby_loops) {
-                        int32_t loopCenterX = loop->mid1;
-                        int32_t loopCenterY = loop->mid2;
-                        if (std::abs(record.binX - loopCenterX) <= window_size &&
-                            std::abs(record.binY - loopCenterY) <= window_size) {
+                        int32_t loopCenterBinX = loop->gmid1 / resolution;
+                        int32_t loopCenterBinY = loop->gmid2 / resolution;
+                        if (std::abs(record.binX - loopCenterBinX) <= window_size &&
+                            std::abs(record.binY - loopCenterBinY) <= window_size) {
                             
                             // Calculate relative position and add to matrix
-                            int relX = record.binX - (loopCenterX - window_size);
-                            int relY = record.binY - (loopCenterY - window_size);
+                            int relX = record.binX - (loopCenterBinX - window_size);
+                            int relY = record.binY - (loopCenterBinY - window_size);
                             all_matrices[bedpe_idx].add(relX, relY, record.value);
                         }
                     }
@@ -265,13 +267,11 @@ std::vector<APAMatrix> processSliceFile(
             for (const auto& chrom_pair : all_indices[bedpe_idx].loops) {
                 for (const auto& bin_group : chrom_pair.second) {
                     for (const auto& loop : bin_group.second) {
-                        int32_t bin1Start = loop.mid1 - window_size;
-                        int32_t bin2Start = loop.mid2 - window_size;
+                        int32_t bin1Start = (loop.gmid1/resolution) - window_size;
+                        int32_t bin2Start = (loop.gmid2/resolution) - window_size;
                         
-                        coverage.addLocalSums(all_rowSums[bedpe_idx], loop.chrom1Key, 
-                                            chromosomeKeyToName[loop.chrom1Key], bin1Start);
-                        coverage.addLocalSums(all_colSums[bedpe_idx], loop.chrom2Key,
-                                            chromosomeKeyToName[loop.chrom2Key], bin2Start);
+                        coverage.addLocalSums(all_rowSums[bedpe_idx], loop.chrom1Key, bin1Start);
+                        coverage.addLocalSums(all_colSums[bedpe_idx], loop.chrom2Key, bin2Start);
                     }
                 }
             }

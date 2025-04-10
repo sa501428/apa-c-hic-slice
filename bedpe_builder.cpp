@@ -33,7 +33,7 @@ std::map<std::string, std::vector<BedEntry>> BedpeBuilder::loadBedFile(const std
         
         BedEntry entry;
         entry.chrom = chrom;
-        entry.mid = (start + end) / 2;
+        entry.gmid = (start + end) / 2;
         
         bed_data[entry.chrom].push_back(entry);
     }
@@ -42,7 +42,7 @@ std::map<std::string, std::vector<BedEntry>> BedpeBuilder::loadBedFile(const std
     for (auto& pair : bed_data) {
         std::sort(pair.second.begin(), pair.second.end(),
                  [](const BedEntry& a, const BedEntry& b) {
-                     return a.mid < b.mid;
+                     return a.gmid < b.gmid;
                  });
     }
     
@@ -58,14 +58,14 @@ std::vector<BedpeEntry> BedpeBuilder::generateIntraChromosomal(
     
     for (const auto& forward : forwards) {
         for (const auto& reverse : reverses) {
-            long dist = abs(reverse.mid - forward.mid);
+            long dist = abs(reverse.gmid - forward.gmid);
             
             if (dist > min_genome_dist && dist <= max_genome_dist) {
                 BedpeEntry bedpe;
                 bedpe.chrom1 = chrom;
-                bedpe.mid1 = forward.mid;
+                bedpe.gmid1 = forward.gmid;
                 bedpe.chrom2 = chrom;
-                bedpe.mid2 = reverse.mid;
+                bedpe.gmid2 = reverse.gmid;
                 results.push_back(bedpe);
             }
         }
@@ -114,9 +114,9 @@ std::vector<BedpeEntry> BedpeBuilder::generateInterChromosomal(
         for (const auto& second : reverses) {
             BedpeEntry bedpe;
             bedpe.chrom1 = chrom1;
-            bedpe.mid1 = first.mid;
+            bedpe.gmid1 = first.gmid;
             bedpe.chrom2 = chrom2;
-            bedpe.mid2 = second.mid;
+            bedpe.gmid2 = second.gmid;
             results.push_back(bedpe);
         }
     }
@@ -170,13 +170,13 @@ std::vector<BedpeEntry> BedpeBuilder::buildBedpe() {
 bool BedpeEntry::operator<(const BedpeEntry& other) const {
     if (chrom1 != other.chrom1) return chrom1 < other.chrom1;
     if (chrom2 != other.chrom2) return chrom2 < other.chrom2;
-    if (mid1 != other.mid1) return mid1 < other.mid1;
-    return mid2 < other.mid2;
+    if (gmid1 != other.gmid1) return gmid1 < other.gmid1;
+    return gmid2 < other.gmid2;
 }
 
 bool BedpeEntry::operator==(const BedpeEntry& other) const {
     return chrom1 == other.chrom1 &&
-           mid1 == other.mid1 &&
+           gmid1 == other.gmid1 &&
            chrom2 == other.chrom2 &&
-           mid2 == other.mid2;
+           gmid2 == other.gmid2;
 } 
