@@ -79,45 +79,7 @@ std::vector<APAMatrix> processSliceFile(
 
         std::cout << "Resolution is " << resolution << std::endl;
 
-        // Create data structures from BedpeEntries and then discard them
-        std::vector<RegionsOfInterest> all_roi;
-        std::vector<LoopIndex> all_indices;
-        all_roi.reserve(all_bedpe_entries.size());
-        all_indices.reserve(all_bedpe_entries.size());
-
-        // After reading chromosome mapping
-        for (const auto& pair : chromosomeKeyToName) {
-            chromNameToKey[pair.second] = pair.first;
-        }
-
-        // When creating indices
-        for (const auto& entries : all_bedpe_entries) {
-            all_roi.emplace_back(entries, resolution, window_size, isInter);
-            all_indices.emplace_back(entries, resolution, chromNameToKey);
-        }
-
-        // Clear original BedpeEntries as they're no longer needed
-        all_bedpe_entries.clear();
-        all_bedpe_entries.shrink_to_fit();
-
-        // Create vectors to hold per-bedpe data structures
-        size_t num_bedpes = all_roi.size();
-        std::vector<APAMatrix> all_matrices;
-        std::vector<std::vector<float>> all_rowSums(num_bedpes);
-        std::vector<std::vector<float>> all_colSums(num_bedpes);
-
-        // Initialize data structures for each BEDPE set
-        all_matrices.reserve(num_bedpes);
-
-        for (size_t i = 0; i < num_bedpes; i++) {
-            all_matrices.push_back(APAMatrix(window_size * 2 + 1));
-            all_rowSums[i].resize(window_size * 2 + 1, 0.0f);
-            all_colSums[i].resize(window_size * 2 + 1, 0.0f);
-        }
-
-        std::cout << "Data structures initialized..." << std::endl;
-
-        // Read chromosome mapping
+        // Move chromosome mapping read to here, before creating data structures
         int32_t numChromosomes;
         if (is_compressed) {
             if (gzread(gz_file, &numChromosomes, sizeof(int32_t)) != sizeof(int32_t)) {
@@ -153,7 +115,7 @@ std::vector<APAMatrix> processSliceFile(
                     throw std::runtime_error("Failed to read chromosome name");
                 }
             } else {
-                if (fread(nameBuffer.data(), 1, nameLength, raw_file) != (size_t)nameLength) {
+                if (fread(nameBuffer.data(), 1, nameLength, raw_file) != nameLength) {
                     throw std::runtime_error("Failed to read chromosome name");
                 }
             }
@@ -171,8 +133,41 @@ std::vector<APAMatrix> processSliceFile(
             }
 
             chromosomeKeyToName[key] = chromosomeName;
+            chromNameToKey[chromosomeName] = key;
             std::cout << "Read chromosome: " << chromosomeName << " (key=" << key << ")" << std::endl;
         }
+
+        // Now create data structures with the chromosome mapping available
+        std::vector<RegionsOfInterest> all_roi;
+        std::vector<LoopIndex> all_indices;
+        all_roi.reserve(all_bedpe_entries.size());
+        all_indices.reserve(all_bedpe_entries.size());
+
+        for (const auto& entries : all_bedpe_entries) {
+            all_roi.emplace_back(entries, resolution, window_size, isInter);
+            all_indices.emplace_back(entries, resolution, chromNameToKey);
+        }
+
+        // Clear original BedpeEntries as they're no longer needed
+        all_bedpe_entries.clear();
+        all_bedpe_entries.shrink_to_fit();
+
+        // Create vectors to hold per-bedpe data structures
+        size_t num_bedpes = all_roi.size();
+        std::vector<APAMatrix> all_matrices;
+        std::vector<std::vector<float>> all_rowSums(num_bedpes);
+        std::vector<std::vector<float>> all_colSums(num_bedpes);
+
+        // Initialize data structures for each BEDPE set
+        all_matrices.reserve(num_bedpes);
+
+        for (size_t i = 0; i < num_bedpes; i++) {
+            all_matrices.push_back(APAMatrix(window_size * 2 + 1));
+            all_rowSums[i].resize(window_size * 2 + 1, 0.0f);
+            all_colSums[i].resize(window_size * 2 + 1, 0.0f);
+        }
+
+        std::cout << "Data structures initialized..." << std::endl;
 
         // Create single coverage vectors instance (shared across all BEDPEs)
         CoverageVectors coverage(resolution);
