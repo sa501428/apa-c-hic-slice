@@ -81,9 +81,16 @@ std::vector<APAMatrix> processSliceFile(
         all_roi.reserve(all_bedpe_entries.size());
         all_indices.reserve(all_bedpe_entries.size());
 
+        // After reading chromosome mapping
+        std::map<std::string, int16_t> chromNameToKey;
+        for (const auto& pair : chromosomeKeyToName) {
+            chromNameToKey[pair.second] = pair.first;
+        }
+
+        // When creating indices
         for (const auto& entries : all_bedpe_entries) {
             all_roi.emplace_back(entries, resolution, window_size, isInter);
-            all_indices.emplace_back(entries, resolution);
+            all_indices.emplace_back(entries, resolution, chromNameToKey);
         }
 
         // Clear original BedpeEntries as they're no longer needed
@@ -203,29 +210,22 @@ std::vector<APAMatrix> processSliceFile(
                 continue;
             }
 
+            if (isInter && record.chr1Key == record.chr2Key) continue;
+            if (!isInter && record.chr1Key != record.chr2Key) continue;
+
             std::string chr1 = chromosomeKeyToName[record.chr1Key];
             std::string chr2 = chromosomeKeyToName[record.chr2Key];
             
-            // Quick filter for inter/intra chromosomal contacts
-            if (isInter && chr1 == chr2) continue;
-            if (!isInter && chr1 != chr2) continue;
 
             // Add to coverage vectors (after inter/intra but before any other filtering)
             coverage.add(chr1, record.binX, record.value);
-            if (chr1 != chr2 || record.binX != record.binY) {  // Don't double count diagonal
+            if (record.chr1Key != record.chr2Key || record.binX != record.binY) {  // Don't double count diagonal
                 coverage.add(chr2, record.binY, record.value);
             }
 
-            // For intra-chromosomal analysis, filter by genomic distance
+            // For intra-chromosomal analysis, filter by distance from diagonal
             if (!isInter) {
-                // Convert bin distance to genomic distance
                 int32_t bin_distance = std::abs(record.binX - record.binY);
-                
-                
-                // Add buffer of 3*window_size to both min and max distances
-                int64_t buffer = static_cast<int64_t>();
-                
-                // Skip if outside the distance range (with buffer) used to generate BEDPE
                 if (bin_distance < min_genome_dist_as_bin || bin_distance > max_genome_dist_as_bin) {
                     continue;
                 }
@@ -234,7 +234,7 @@ std::vector<APAMatrix> processSliceFile(
             // Process for each BEDPE set
             for (size_t bedpe_idx = 0; bedpe_idx < all_roi.size(); bedpe_idx++) {
                 if (all_roi[bedpe_idx].probablyContainsRecord(chr1, chr2, record.binX, record.binY)) {
-                    auto nearby_loops = all_indices[bedpe_idx].getNearbyLoops(chr1, chr2, record.binX);
+                    auto nearby_loops = all_indices[bedpe_idx].getNearbyLoops(record.chr1Key, record.chr2Key, record.binX);
                     for (const auto* loop : nearby_loops) {
                         int32_t loopCenterX = loop->mid1;
                         int32_t loopCenterY = loop->mid2;

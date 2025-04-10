@@ -166,26 +166,26 @@ namespace detail {
 
 // Define structures first
 struct LoopInfo {
-    std::string chrom1;
-    std::string chrom2;
+    int16_t chrom1Key;
+    int16_t chrom2Key;
     int32_t mid1;
     int32_t mid2;
     
-    LoopInfo(const BedpeEntry& entry) 
-        : chrom1(entry.chrom1), chrom2(entry.chrom2),
-          mid1(entry.mid1), mid2(entry.mid2) {}
-          
-    int32_t getMid1() const { return mid1; }
-    int32_t getMid2() const { return mid2; }
+    LoopInfo(const BedpeEntry& entry, 
+             const std::map<std::string, int16_t>& chromNameToKey) 
+        : chrom1Key(chromNameToKey.at(entry.chrom1))
+        , chrom2Key(chromNameToKey.at(entry.chrom2))
+        , mid1(entry.mid1)
+        , mid2(entry.mid2) {}
 };
 
 struct ChromPair {
-    std::string chrom1;
-    std::string chrom2;
+    int16_t chrom1Key;
+    int16_t chrom2Key;
     
     bool operator<(const ChromPair& other) const {
-        if (chrom1 != other.chrom1) return chrom1 < other.chrom1;
-        return chrom2 < other.chrom2;
+        if (chrom1Key != other.chrom1Key) return chrom1Key < other.chrom1Key;
+        return chrom2Key < other.chrom2Key;
     }
 };
 
@@ -251,18 +251,24 @@ struct LoopIndex {
     std::map<ChromPair, std::map<int32_t, std::vector<LoopInfo>>> loops;
     int32_t resolution;
     
-    LoopIndex(const std::vector<BedpeEntry>& bedpe_entries, int32_t res) : resolution(res) {
+    LoopIndex(const std::vector<BedpeEntry>& bedpe_entries, 
+              int32_t res,
+              const std::map<std::string, int16_t>& chromNameToKey) 
+        : resolution(res) {
         for (const auto& loop : bedpe_entries) {
-            ChromPair chrom_pair{loop.chrom1, loop.chrom2};
-            int32_t mid_bin = ((loop.start1 + loop.end1) / 2) / resolution;
+            ChromPair chrom_pair{
+                chromNameToKey.at(loop.chrom1),
+                chromNameToKey.at(loop.chrom2)
+            };
+            int32_t mid_bin = loop.mid1 / resolution;
             int32_t bin_group = mid_bin / BIN_GROUP_SIZE;
-            loops[chrom_pair][bin_group].emplace_back(loop);
+            loops[chrom_pair][bin_group].emplace_back(loop, chromNameToKey);
         }
     }
     
-    std::vector<const LoopInfo*> getNearbyLoops(const std::string& chr1, const std::string& chr2, 
+    std::vector<const LoopInfo*> getNearbyLoops(int16_t chr1Key, int16_t chr2Key, 
                                                int32_t binX) const {
-        ChromPair chrom_pair{chr1, chr2};
+        ChromPair chrom_pair{chr1Key, chr2Key};
         auto chrom_it = loops.find(chrom_pair);
         if (chrom_it == loops.end()) return {};
         
