@@ -8,23 +8,9 @@
 #include <iomanip>
 #include <algorithm>
 #include <iostream>
+#include "apa_matrix.h"
+#include "vector_tools.h"
 
-void APAMatrix::save(const std::string& filename) const {
-    std::ofstream out(filename);
-    if (!out) {
-        throw std::runtime_error("Cannot open output file: " + filename);
-    }
-
-    // Write as space-separated values with high precision
-    out << std::fixed << std::setprecision(6);
-    for (int i = 0; i < width; i++) {
-        for (int j = 0; j < width; j++) {
-            if (j > 0) out << " ";
-            out << matrix[i][j];
-        }
-        out << "\n";
-    }
-}
 
 std::vector<APAMatrix> processSliceFile(
     const std::string& slice_file,
@@ -194,6 +180,9 @@ std::vector<APAMatrix> processSliceFile(
         std::cout << "Processing contacts..." << std::endl;
         int64_t contact_count = 0;
 
+        int32_t max_genome_dist_as_bin = (max_genome_dist / resolution) + (3 * window_size);
+        int32_t min_genome_dist_as_bin = (min_genome_dist / resolution) - (3 * window_size);
+
         size_t record_size = sizeof(record);
         while ((is_compressed ? 
                 (gzread(gz_file, &record, record_size) == static_cast<int>(record_size)) :
@@ -231,19 +220,13 @@ std::vector<APAMatrix> processSliceFile(
             if (!isInter) {
                 // Convert bin distance to genomic distance
                 int32_t bin_distance = std::abs(record.binX - record.binY);
-                int64_t genomic_distance = static_cast<int64_t>(bin_distance) * resolution;
                 
-                // Should check for overflow:
-                if (bin_distance > std::numeric_limits<int64_t>::max() / resolution) {
-                    throw std::runtime_error("Genomic distance calculation would overflow");
-                }
                 
                 // Add buffer of 3*window_size to both min and max distances
-                int64_t buffer = static_cast<int64_t>(3 * window_size) * resolution;
+                int64_t buffer = static_cast<int64_t>();
                 
                 // Skip if outside the distance range (with buffer) used to generate BEDPE
-                if (genomic_distance < (min_genome_dist - buffer) || 
-                    genomic_distance > (max_genome_dist + buffer)) {
+                if (bin_distance < min_genome_dist_as_bin || bin_distance > max_genome_dist_as_bin) {
                     continue;
                 }
             }
@@ -292,8 +275,8 @@ std::vector<APAMatrix> processSliceFile(
             }
 
             // Scale sums and normalize matrix
-            APAMatrix::scaleByAverage(all_rowSums[bedpe_idx]);
-            APAMatrix::scaleByAverage(all_colSums[bedpe_idx]);
+            vector_tools::scaleByAverage(all_rowSums[bedpe_idx]);
+            vector_tools::scaleByAverage(all_colSums[bedpe_idx]);
             all_matrices[bedpe_idx].normalize(all_rowSums[bedpe_idx], all_colSums[bedpe_idx]);
         }
 

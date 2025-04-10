@@ -14,6 +14,7 @@
 #include <map>
 #include <sys/sysinfo.h>
 #include <iomanip>
+#include "apa_matrix.h"
 
 // Forward declarations
 struct RegionsOfInterest;
@@ -279,67 +280,6 @@ struct LoopIndex {
         }
         return nearby_loops;
     }
-};
-
-// Structure to hold APA matrix
-struct APAMatrix {
-    std::vector<std::vector<float>> matrix;
-    int width;
-    
-    APAMatrix(int size) : width(size) {
-        if (size <= 0) {
-            throw std::runtime_error("APAMatrix size must be positive");
-        }
-        matrix.resize(size, std::vector<float>(size, 0.0f));
-    }
-    
-    void add(int relX, int relY, float value) {
-        if (relX >= 0 && relX < width && relY >= 0 && relY < width) {
-            matrix[relX][relY] += value;
-        }
-    }
-
-    // Get average of non-zero values
-    static float getAverage(const std::vector<float>& vec) {
-        float sum = 0.0f;
-        int count = 0;
-        for (float val : vec) {
-            if (val > 0) {
-                sum += val;
-                count++;
-            }
-        }
-        return count > 0 ? sum / count : 1.0f;  // Return 1.0 instead of 0 to prevent division by zero
-    }
-
-    // Scale vector by its average
-    static void scaleByAverage(std::vector<float>& vec) {
-        float avg = getAverage(vec);
-        if (avg > 0) {
-            for (float& val : vec) {
-                val /= avg;
-            }
-        }
-    }
-
-    // Normalize matrix using row and column sums
-    void normalize(const std::vector<float>& rowSums, const std::vector<float>& colSums) {
-        std::vector<std::vector<float>> normalized(width, std::vector<float>(width, 0.0f));
-        
-        for (int r = 0; r < width; ++r) {
-            for (int c = 0; c < width; ++c) {
-                float normVal = rowSums[r] * colSums[c];
-                if (normVal > 0) {
-                    normalized[r][c] = matrix[r][c] / normVal;
-                }
-                // If normVal is 0, leave normalized[r][c] as 0
-            }
-        }
-        
-        matrix = std::move(normalized);
-    }
-
-    void save(const std::string& filename) const;
 };
 
 // Structure to hold coverage vectors
