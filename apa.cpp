@@ -115,7 +115,7 @@ std::vector<APAMatrix> processSliceFile(
                     throw std::runtime_error("Failed to read chromosome name");
                 }
             } else {
-                if (fread(nameBuffer.data(), 1, nameLength, raw_file) != nameLength) {
+                if (fread(nameBuffer.data(), 1, nameLength, raw_file) != static_cast<size_t>(nameLength)) {
                     throw std::runtime_error("Failed to read chromosome name");
                 }
             }
