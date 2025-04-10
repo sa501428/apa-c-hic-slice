@@ -218,9 +218,9 @@ std::vector<APAMatrix> processSliceFile(
             
 
             // Add to coverage vectors (after inter/intra but before any other filtering)
-            coverage.add(chr1, record.binX, record.value);
+            coverage.add(record.chr1Key, chr1, record.binX, record.value);
             if (record.chr1Key != record.chr2Key || record.binX != record.binY) {  // Don't double count diagonal
-                coverage.add(chr2, record.binY, record.value);
+                coverage.add(record.chr2Key, chr2, record.binY, record.value);
             }
 
             // For intra-chromosomal analysis, filter by distance from diagonal
@@ -268,8 +268,10 @@ std::vector<APAMatrix> processSliceFile(
                         int32_t bin1Start = loop.mid1 - window_size;
                         int32_t bin2Start = loop.mid2 - window_size;
                         
-                        coverage.addLocalSums(all_rowSums[bedpe_idx], loop.chrom1, bin1Start);
-                        coverage.addLocalSums(all_colSums[bedpe_idx], loop.chrom2, bin2Start);
+                        coverage.addLocalSums(all_rowSums[bedpe_idx], loop.chrom1Key, 
+                                            chromosomeKeyToName[loop.chrom1Key], bin1Start);
+                        coverage.addLocalSums(all_colSums[bedpe_idx], loop.chrom2Key,
+                                            chromosomeKeyToName[loop.chrom2Key], bin2Start);
                     }
                 }
             }

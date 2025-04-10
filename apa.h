@@ -290,30 +290,30 @@ struct LoopIndex {
 
 // Structure to hold coverage vectors
 struct CoverageVectors {
-    std::unordered_map<std::string, std::vector<float>> vectors;  // chrom -> coverage vector
+    std::unordered_map<int16_t, std::vector<float>> vectors;  // chromKey -> coverage vector
     int32_t resolution;
     
     CoverageVectors(int32_t res) : resolution(res) {}
     
-    void add(const std::string& chrom, int32_t bin, float value) {
-        const size_t MAX_VECTOR_SIZE = 25000000;  // 1 billion elements
+    void add(int16_t chromKey, const std::string& chromName, int32_t bin, float value) {
+        const size_t MAX_VECTOR_SIZE = 25000000;  // 25 million elements
         if (bin >= MAX_VECTOR_SIZE) {
             throw std::runtime_error("Bin index exceeds maximum allowed size");
         }
-        auto& vec = vectors[chrom];
+        auto& vec = vectors[chromKey];
         if (vec.empty()) {
-            vec.resize(detail::getChromBins(chrom, resolution), 0.0f);
+            vec.resize(detail::getChromBins(chromName, resolution), 0.0f);
         }
         if (static_cast<size_t>(bin) >= vec.size()) {
-            size_t new_size = detail::getChromBins(chrom, resolution);
+            size_t new_size = detail::getChromBins(chromName, resolution);
             vec.resize(new_size, 0.0f);
         }
         vec[bin] += value;
     }
 
-    void addLocalSums(std::vector<float>& sums, const std::string& chrom, 
+    void addLocalSums(std::vector<float>& sums, int16_t chromKey, const std::string& chromName, 
                      int32_t binStart) const {
-        auto it = vectors.find(chrom);
+        auto it = vectors.find(chromKey);
         if (it != vectors.end()) {
             const auto& vec = it->second;
             for (size_t i = 0; i < sums.size(); i++) {
