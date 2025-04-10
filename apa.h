@@ -70,63 +70,37 @@ namespace detail {
         size_t peak_memory = 0;
         size_t current_memory = 0;
         
-        // Phase 1: Initial loading and structure creation
-        // BedpeEntry size: 2 strings (32 bytes each) + 4 longs (8 bytes each)
-        current_memory += total_bedpes * (64 + 32);
+        // Phase 1: Initial data structures
         
-        // RegionsOfInterest (2 maps of sets of bin indices)
-        size_t roi_size = bedpe_entries.size() * // Number of ROIs
-                         total_bedpes * // Entries per ROI
-                         (window_size * 2 + 1) * 2 * // Indices per entry (both dimensions)
-                         4; // Size of int32_t
+        // LoopInfo size (2 int16_t + 2 int32_t = 12 bytes)
+        size_t loop_info_size = total_bedpes * 12;
+        current_memory += loop_info_size;
+        
+        // RegionsOfInterest - bin indices for each chromosome
+        size_t matrix_width = window_size * 2 + 1;
+        // Each bin is an int32_t (4 bytes) in an unordered_set
+        size_t bins_per_chrom = matrix_width * 4;
+        size_t roi_size = unique_chroms.size() * bins_per_chrom * 2; // For both row and col indices
         current_memory += roi_size;
-        
-        // LoopIndex structures with LoopInfo
-        size_t loop_index_size = 0;
-        // LoopInfo: 2 strings (32 bytes each) + 6 int32_t (4 bytes each)
-        loop_index_size += total_bedpes * (64 + 24) * bedpe_entries.size();
-        
-        // ChromPair map structures
-        size_t chrom_pairs = (unique_chroms.size() * unique_chroms.size()) / 4;
-        loop_index_size += chrom_pairs * (
-            64 + // ChromPair (2 strings, 32 bytes each)
-            48 + // std::map overhead
-            // Estimate bin groups per chrom pair: chr1 size = 248956422
-            (248956422 / 1000000) * 24 // vector overhead, using 1M as bin group size (1000 * 1000)
-        );
-        current_memory += loop_index_size;
         
         peak_memory = std::max(peak_memory, current_memory);
         
-        // Phase 2: After freeing BedpeEntries
-        current_memory -= total_bedpes * (64 + 32);
+        // Phase 2: Analysis structures
         
-        // APAMatrix (width x width float matrix for each BEDPE set)
-        size_t matrix_width = window_size * 2 + 1;
+        // APAMatrix (one per BEDPE set)
         size_t matrix_size = matrix_width * matrix_width * 4; // 4 bytes per float
         current_memory += bedpe_entries.size() * matrix_size;
         
-        // Coverage vectors (one float vector per chromosome)
-        size_t coverage_size = 0;
-        for (const auto& chrom : unique_chroms) {
-            coverage_size += estimateChromCoverageMemory(chrom, 1000);
-        }
+        // Coverage vectors (one per chromosome)
+        size_t avg_chrom_size = 100000000; // 100Mb average chromosome size
+        size_t bins_per_coverage = avg_chrom_size / 1000; // 1kb resolution
+        size_t coverage_size = unique_chroms.size() * bins_per_coverage * 4; // 4 bytes per float
         current_memory += coverage_size;
         
         peak_memory = std::max(peak_memory, current_memory);
         
-        // Phase 3: After freeing ROI
-        current_memory -= roi_size;
-        
-        // Row and column sums (float vector for each BEDPE set)
-        size_t sums_size = bedpe_entries.size() * 2 * // Two vectors per BEDPE set
-                          matrix_width * 4; // 4 bytes per float
-        current_memory += sums_size;
-        
-        peak_memory = std::max(peak_memory, current_memory);
-
-        // Add 30% overhead for STL containers and other overhead
-        peak_memory = static_cast<size_t>(peak_memory * 1.3);
+        // Add 5% overhead for STL containers and memory fragmentation
+        peak_memory = static_cast<size_t>(peak_memory * 1.05);
         
         return peak_memory;
     }
@@ -151,7 +125,7 @@ namespace detail {
                       << "Total system RAM: " << std::setprecision(2) << total_gb << " GB\n"
                       << "Available RAM: " << std::setprecision(2) << avail_gb << " GB\n\n";
             
-            if (estimated_bytes > available_ram * 0.9) { // Leave 10% buffer
+            if (estimated_bytes > available_ram) {
                 throw std::runtime_error(
                     "Insufficient memory available. Need " + 
                     std::to_string(est_gb) + " GB but only " + 
