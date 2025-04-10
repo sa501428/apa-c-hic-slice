@@ -259,7 +259,8 @@ struct LoopIndex {
 
 // Structure to hold coverage vectors
 struct CoverageVectors {
-    std::unordered_map<int16_t, std::vector<float>> vectors;  // chromKey -> coverage vector
+    // Change to sparse representation using unordered_map
+    std::unordered_map<int16_t, std::unordered_map<int32_t, float>> vectors;  // chromKey -> (bin -> coverage)
     int32_t resolution;
     
     CoverageVectors(int32_t res) : resolution(res) {}
@@ -269,25 +270,21 @@ struct CoverageVectors {
         if (bin >= MAX_VECTOR_SIZE) {
             throw std::runtime_error("Bin index exceeds maximum allowed size");
         }
-        auto& vec = vectors[chromKey];
-        if (vec.empty()) {
-            vec.resize(detail::getChromBins(chromName, resolution), 0.0f);
+        // Only store non-zero values
+        if (value > 0) {
+            vectors[chromKey][bin] += value;
         }
-        if (static_cast<size_t>(bin) >= vec.size()) {
-            size_t new_size = detail::getChromBins(chromName, resolution);
-            vec.resize(new_size, 0.0f);
-        }
-        vec[bin] += value;
     }
 
     void addLocalSums(std::vector<float>& sums, int16_t chromKey, int32_t binStart) const {
         auto it = vectors.find(chromKey);
         if (it != vectors.end()) {
-            const auto& vec = it->second;
+            const auto& sparse_vec = it->second;
             for (size_t i = 0; i < sums.size(); i++) {
                 int32_t bin = binStart + static_cast<int32_t>(i);
-                if (bin >= 0 && static_cast<size_t>(bin) < vec.size()) {
-                    sums[i] += vec[bin];
+                auto bin_it = sparse_vec.find(bin);
+                if (bin_it != sparse_vec.end()) {
+                    sums[i] += bin_it->second;
                 }
             }
         }
