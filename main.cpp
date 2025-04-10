@@ -66,6 +66,11 @@ int main(int argc, char* argv[]) {
         if (window_size <= 0) {
             throw std::runtime_error("Window size must be positive");
         }
+        const int MAX_WINDOW_SIZE = 1000;
+        if (window_size > MAX_WINDOW_SIZE) {
+            throw std::runtime_error("Window size too large (max: " + 
+                                   std::to_string(MAX_WINDOW_SIZE) + ")");
+        }
         if (!fileExists(slice_file)) {
             throw std::runtime_error("Slice file not found: " + slice_file);
         }

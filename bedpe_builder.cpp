@@ -27,8 +27,13 @@ std::map<std::string, std::vector<BedEntry>> BedpeBuilder::loadBedFile(const std
     
     while (std::getline(file, line)) {
         std::istringstream iss(line);
+        std::string chrom;
+        long start, end;
+        iss >> chrom >> start >> end;
+        
         BedEntry entry;
-        iss >> entry.chrom >> entry.start >> entry.end;
+        entry.chrom = chrom;
+        entry.mid = (start + end) / 2;
         
         bed_data[entry.chrom].push_back(entry);
     }
@@ -37,7 +42,7 @@ std::map<std::string, std::vector<BedEntry>> BedpeBuilder::loadBedFile(const std
     for (auto& pair : bed_data) {
         std::sort(pair.second.begin(), pair.second.end(),
                  [](const BedEntry& a, const BedEntry& b) {
-                     return a.getMid() < b.getMid();
+                     return a.mid < b.mid;
                  });
     }
     
@@ -53,19 +58,15 @@ std::vector<BedpeEntry> BedpeBuilder::generateIntraChromosomal(
     
     for (const auto& forward : forwards) {
         for (const auto& reverse : reverses) {
-            if (forward.end < reverse.start) {
-                long dist = reverse.getMid() - forward.getMid();
-                
-                if (dist > min_genome_dist && dist <= max_genome_dist) {
-                    BedpeEntry bedpe;
-                    bedpe.chrom1 = chrom;
-                    bedpe.start1 = forward.start;
-                    bedpe.end1 = forward.end;
-                    bedpe.chrom2 = chrom;
-                    bedpe.start2 = reverse.start;
-                    bedpe.end2 = reverse.end;
-                    results.push_back(bedpe);
-                }
+            long dist = abs(reverse.mid - forward.mid);
+            
+            if (dist > min_genome_dist && dist <= max_genome_dist) {
+                BedpeEntry bedpe;
+                bedpe.chrom1 = chrom;
+                bedpe.mid1 = forward.mid;
+                bedpe.chrom2 = chrom;
+                bedpe.mid2 = reverse.mid;
+                results.push_back(bedpe);
             }
         }
     }
@@ -101,30 +102,21 @@ std::vector<BedpeEntry> BedpeBuilder::generateInterChromosomal(
         return results;
     }
 
-    // Extract chromosome numbers for comparison (safe now because we validated format)
+    // Extract chromosome numbers for comparison
     int chr1_num = std::stoi(chrom1.substr(3));
     int chr2_num = std::stoi(chrom2.substr(3));
 
-    // Only process pairs where chr1 <= chr2
     if(chr1_num > chr2_num) {
         return results;
     }
 
-    // Set variables for the forward direction only
-    std::string first_chrom = chrom1;
-    std::string second_chrom = chrom2;
-    const std::vector<BedEntry>& first_entries = forwards;
-    const std::vector<BedEntry>& second_entries = reverses;
-
-    for (const auto& first : first_entries) {
-        for (const auto& second : second_entries) {
+    for (const auto& first : forwards) {
+        for (const auto& second : reverses) {
             BedpeEntry bedpe;
-            bedpe.chrom1 = first_chrom;
-            bedpe.start1 = first.start;
-            bedpe.end1 = first.end;
-            bedpe.chrom2 = second_chrom;
-            bedpe.start2 = second.start;
-            bedpe.end2 = second.end;
+            bedpe.chrom1 = chrom1;
+            bedpe.mid1 = first.mid;
+            bedpe.chrom2 = chrom2;
+            bedpe.mid2 = second.mid;
             results.push_back(bedpe);
         }
     }
@@ -178,15 +170,13 @@ std::vector<BedpeEntry> BedpeBuilder::buildBedpe() {
 bool BedpeEntry::operator<(const BedpeEntry& other) const {
     if (chrom1 != other.chrom1) return chrom1 < other.chrom1;
     if (chrom2 != other.chrom2) return chrom2 < other.chrom2;
-    if (start1 != other.start1) return start1 < other.start1;
-    return start2 < other.start2;
+    if (mid1 != other.mid1) return mid1 < other.mid1;
+    return mid2 < other.mid2;
 }
 
 bool BedpeEntry::operator==(const BedpeEntry& other) const {
     return chrom1 == other.chrom1 &&
-           start1 == other.start1 &&
-           end1 == other.end1 &&
+           mid1 == other.mid1 &&
            chrom2 == other.chrom2 &&
-           start2 == other.start2 &&
-           end2 == other.end2;
+           mid2 == other.mid2;
 } 

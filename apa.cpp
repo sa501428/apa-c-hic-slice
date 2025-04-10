@@ -233,6 +233,11 @@ std::vector<APAMatrix> processSliceFile(
                 int32_t bin_distance = std::abs(record.binX - record.binY);
                 int64_t genomic_distance = static_cast<int64_t>(bin_distance) * resolution;
                 
+                // Should check for overflow:
+                if (bin_distance > std::numeric_limits<int64_t>::max() / resolution) {
+                    throw std::runtime_error("Genomic distance calculation would overflow");
+                }
+                
                 // Add buffer of 3*window_size to both min and max distances
                 int64_t buffer = static_cast<int64_t>(3 * window_size) * resolution;
                 
@@ -247,19 +252,9 @@ std::vector<APAMatrix> processSliceFile(
             for (size_t bedpe_idx = 0; bedpe_idx < all_roi.size(); bedpe_idx++) {
                 if (all_roi[bedpe_idx].probablyContainsRecord(chr1, chr2, record.binX, record.binY)) {
                     auto nearby_loops = all_indices[bedpe_idx].getNearbyLoops(chr1, chr2, record.binX);
-                    
                     for (const auto* loop : nearby_loops) {
-                        // Convert BEDPE coordinates to bin positions
-                        int32_t bin1Start = loop->start1 / resolution;
-                        int32_t bin1End = (loop->end1 / resolution) + 1;
-                        int32_t bin2Start = loop->start2 / resolution;
-                        int32_t bin2End = (loop->end2 / resolution) + 1;
-                        
-                        // Calculate center bin positions
-                        int32_t loopCenterX = (bin1Start + bin1End) / 2;
-                        int32_t loopCenterY = (bin2Start + bin2End) / 2;
-                        
-                        // Only process if contact is within window of loop center
+                        int32_t loopCenterX = loop->mid1;
+                        int32_t loopCenterY = loop->mid2;
                         if (std::abs(record.binX - loopCenterX) <= window_size &&
                             std::abs(record.binY - loopCenterY) <= window_size) {
                             
@@ -287,8 +282,8 @@ std::vector<APAMatrix> processSliceFile(
             for (const auto& chrom_pair : all_indices[bedpe_idx].loops) {
                 for (const auto& bin_group : chrom_pair.second) {
                     for (const auto& loop : bin_group.second) {
-                        int32_t bin1Start = ((loop.start1 + loop.end1) / 2) / resolution - window_size;
-                        int32_t bin2Start = ((loop.start2 + loop.end2) / 2) / resolution - window_size;
+                        int32_t bin1Start = loop.mid1 - window_size;
+                        int32_t bin2Start = loop.mid2 - window_size;
                         
                         coverage.addLocalSums(all_rowSums[bedpe_idx], loop.chrom1, bin1Start);
                         coverage.addLocalSums(all_colSums[bedpe_idx], loop.chrom2, bin2Start);

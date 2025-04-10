@@ -167,15 +167,15 @@ namespace detail {
 struct LoopInfo {
     std::string chrom1;
     std::string chrom2;
-    int32_t start1;
-    int32_t end1;
-    int32_t start2;
-    int32_t end2;
+    int32_t mid1;
+    int32_t mid2;
     
     LoopInfo(const BedpeEntry& entry) 
         : chrom1(entry.chrom1), chrom2(entry.chrom2),
-          start1(entry.start1), end1(entry.end1),
-          start2(entry.start2), end2(entry.end2) {}
+          mid1(entry.mid1), mid2(entry.mid2) {}
+          
+    int32_t getMid1() const { return mid1; }
+    int32_t getMid2() const { return mid2; }
 };
 
 struct ChromPair {
@@ -350,6 +350,10 @@ struct CoverageVectors {
     CoverageVectors(int32_t res) : resolution(res) {}
     
     void add(const std::string& chrom, int32_t bin, float value) {
+        const size_t MAX_VECTOR_SIZE = 25000000;  // 1 billion elements
+        if (bin >= MAX_VECTOR_SIZE) {
+            throw std::runtime_error("Bin index exceeds maximum allowed size");
+        }
         auto& vec = vectors[chrom];
         if (vec.empty()) {
             vec.resize(detail::getChromBins(chrom, resolution), 0.0f);
