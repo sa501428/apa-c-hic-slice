@@ -1,0 +1,56 @@
+HiC Slice Binary Format Specification
+
+Overview
+The HiC Slice format is a (compressed or uncompressed) binary format for storing Hi-C contact matrices efficiently. The format consists of a header followed by contact records, with the entire file being gzip compressed.
+
+File Structure
+The file begins with a magic string "HiCSlice" (8 bytes) to identify the format. This is followed by the header section and then the contact records.
+
+Header Section
+The header contains:
+1. Resolution (4 bytes, int32) - specifies the bin size in base pairs
+2. Number of chromosomes (4 bytes, int32) - indicates how many chromosome mappings follow
+3. Chromosome mapping table:
+For each chromosome:
+Name length (4 bytes, int32)
+Name string (variable length, UTF-8 encoded)
+Chromosome key (2 bytes, int16)
+
+Contact Records
+After the header, the file contains a series of fixed-size contact records. Each record is 16 bytes and contains:
+1. First chromosome key (2 bytes, int16) - references chromosome mapping
+2. First bin position (4 bytes, int32) - genomic coordinate divided by resolution
+3. Second chromosome key (2 bytes, int16) - references chromosome mapping
+4. Second bin position (4 bytes, int32) - genomic coordinate divided by resolution
+5. Contact value (4 bytes, float) - interaction count or normalized value
+
+
+Technical Constraints
+- Maximum chromosome key: 32,767 (int16 limit)
+- Maximum bin position: 2,147,483,647 (int32 limit)
+- All integers are stored in little-endian format
+- Floating point values use IEEE 754 single precision format
+- File-level gzip compression is used
+
+
+Design Considerations
+The format prioritizes:
+1. Simplicity - fixed-size records and straightforward layout
+2. Space efficiency - compact chromosome encoding and file compression (when enabled)
+3. Access efficiency - ordered records enable range queries
+4. Compatibility - uses standard data types and compression
+
+
+Implementation Notes
+1. The format is designed for sequential writing and reading
+2. No internal indexing is provided - rely on record ordering
+3. The chromosome mapping allows compact storage while maintaining readability
+4. The fixed record size enables simple record-based access patterns
+5. File-level compression (when used) provides good compression without complicating the format
+
+Usage Guidelines
+Readers should verify the magic string before processing
+Resolution should match the binning of the source data
+Chromosome keys should be assigned sequentially starting from 0
+All positions should be properly binned (divided by resolution)
+This format provides a balance between simplicity, efficiency, and usability for storing Hi-C contact matrices, particularly suited for tools that need to process genome-wide interaction data.

@@ -1,0 +1,49 @@
+
+BEDPE format
+
+We have defined a new file format, the browser extensible data paired-end (BEDPE) format, in order to concisely describe disjoint genome features, such as structural variations or paired-end sequence alignments. We chose to define a new format because the existing “blocked” BED format (a.k.a. BED12) does not allow inter-chromosomal feature definitions. In addition, BED12 only has one strand field, which is insufficient for paired-end sequence alignments, especially when studying structural variation.
+
+The BEDPE format is described below. The description is modified from: http://genome.ucsc.edu/FAQ/FAQformat#format1.
+
+1. chrom1 - The name of the chromosome on which the first end of the feature exists.
+Any string can be used. For example, “chr1”, “III”, “myChrom”, “contig1112.23”.
+This column is required.
+Use “.” for unknown.
+
+2. start1 - The zero-based starting position of the first end of the feature on chrom1.
+The first base in a chromosome is numbered 0.
+As with BED format, the start position in each BEDPE feature is therefore interpreted to be 1 greater than the start position listed in the feature. This column is required.
+Use -1 for unknown.
+
+3. end1 - The one-based ending position of the first end of the feature on chrom1.
+The end position in each BEDPE feature is one-based.
+This column is required.
+Use -1 for unknown.
+
+4. chrom2 - The name of the chromosome on which the second end of the feature exists.
+Any string can be used. For example, “chr1”, “III”, “myChrom”, “contig1112.23”.
+This column is required.
+Use “.” for unknown.
+
+5. start2 - The zero-based starting position of the second end of the feature on chrom2.
+The first base in a chromosome is numbered 0.
+As with BED format, the start position in each BEDPE feature is therefore interpreted to be 1 greater than the start position listed in the feature. This column is required.
+Use -1 for unknown.
+
+6. end2 - The one-based ending position of the second end of the feature on chrom2.
+The end position in each BEDPE feature is one-based.
+This column is required.
+Use -1 for unknown.
+
+
+There are additional columns but we won't care about those.
+
+Sample entries from an typical BEDPE file:
+
+chr1  100   200   chr5  5000  5100  bedpe_example1  30   +  -
+chr9  1000  5000  chr9  3000  3800  bedpe_example2  100  +  -
+
+Entries from a BEDPE file with two custom fields added to each record:
+
+chr1  10    20    chr5  50    60    a1     30       +    -  0  1
+chr9  30    40    chr9  80    90    a2     100      +    -  2  1
