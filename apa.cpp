@@ -79,6 +79,9 @@ std::vector<APAMatrix> processSliceFile(
 
         std::cout << "Resolution is " << resolution << std::endl;
 
+        // Perform memory check now that we have the resolution
+        detail::checkMemoryRequirements(all_bedpe_entries, window_size, resolution);
+
         // Move chromosome mapping read to here, before creating data structures
         int32_t numChromosomes;
         if (is_compressed) {

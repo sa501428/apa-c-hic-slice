@@ -53,87 +53,88 @@ namespace detail {
         return 20000000 / resolution * 4; // Default size, 4 bytes per float
     }
 
-    inline size_t estimateMemoryUsage(const std::vector<std::vector<BedpeEntry>>& bedpe_entries, 
-                              int window_size) {
+    inline size_t estimateMemoryUsage(
+        const std::vector<std::vector<BedpeEntry>>& bedpe_entries,
+        int window_size,
+        int resolution)
+    {
         size_t total_bedpes = 0;
         std::set<std::string> unique_chroms;
-        
-        // Count total BEDPEs and unique chromosomes
-        for (const auto& entries : bedpe_entries) {
+        for (auto const& entries : bedpe_entries) {
             total_bedpes += entries.size();
-            for (const auto& entry : entries) {
-                unique_chroms.insert(entry.chrom1);
-                unique_chroms.insert(entry.chrom2);
+            for (auto const& e : entries) {
+                unique_chroms.insert(e.chrom1);
+                unique_chroms.insert(e.chrom2);
             }
         }
-        
-        size_t peak_memory = 0;
-        size_t current_memory = 0;
-        
-        // Phase 1: Initial data structures
-        
-        // LoopInfo size (2 int16_t + 2 int32_t = 12 bytes)
-        size_t loop_info_size = total_bedpes * 12;
-        current_memory += loop_info_size;
-        
-        // RegionsOfInterest - bin indices for each chromosome
-        size_t matrix_width = window_size * 2 + 1;
-        // Each bin is an int32_t (4 bytes) in an unordered_set
-        size_t bins_per_chrom = matrix_width * 4;
-        size_t roi_size = unique_chroms.size() * bins_per_chrom * 2; // For both row and col indices
-        current_memory += roi_size;
-        
-        peak_memory = std::max(peak_memory, current_memory);
-        
-        // Phase 2: Analysis structures
-        
-        // APAMatrix (one per BEDPE set)
-        size_t matrix_size = matrix_width * matrix_width * 4; // 4 bytes per float
-        current_memory += bedpe_entries.size() * matrix_size;
-        
-        // Coverage vectors (one per chromosome)
-        size_t avg_chrom_size = 100000000; // 100Mb average chromosome size
-        size_t bins_per_coverage = avg_chrom_size / 1000; // 1kb resolution
-        size_t coverage_size = unique_chroms.size() * bins_per_coverage * 4; // 4 bytes per float
-        current_memory += coverage_size;
-        
-        peak_memory = std::max(peak_memory, current_memory);
-        
-        // Add 5% overhead for STL containers and memory fragmentation
-        peak_memory = static_cast<size_t>(peak_memory * 1.05);
-        
-        return peak_memory;
+
+        size_t peak = 0, current = 0;
+
+        // 1) LoopInfo: 2×int16_t (2 bytes each) + 2×int32_t (4 bytes each) = 12 bytes per entry
+        current += total_bedpes * 12;  
+
+        // 2) ROI: for each chrom we store two unordered_sets of int32_t (4 bytes each)
+        //    bins = getChromBins(chrom, resolution)
+        size_t roi = 0;
+        for (auto const& chrom : unique_chroms) {
+            size_t bins = getChromBins(chrom, resolution);
+            // rowIndices + colIndices, each bin costs 4 bytes
+            roi += bins * 4 * 2;  
+        }
+        current += roi;
+        peak = std::max(peak, current);
+
+        // 3) APAMatrices: one float-per-cell, float = 4 bytes
+        size_t matrix_w = window_size * 2 + 1;
+        size_t mat_bytes = matrix_w * matrix_w * 4;  
+        current += bedpe_entries.size() * mat_bytes;
+
+        // 4) Coverage: worst-case one float per bin, float = 4 bytes
+        size_t cover = 0;
+        for (auto const& chrom : unique_chroms) {
+            size_t bins = getChromBins(chrom, resolution);
+            cover += bins * 4;
+        }
+        current += cover;
+        peak = std::max(peak, current);
+
+        // 5) Add 5% overhead
+        peak = static_cast<size_t>(peak * 1.05);
+
+        return peak;
     }
 
-    inline void checkMemoryRequirements(const std::vector<std::vector<BedpeEntry>>& bedpe_entries,
-                               int window_size) {
-        size_t estimated_bytes = estimateMemoryUsage(bedpe_entries, window_size);
-        
-        // Get available system memory
+    inline void checkMemoryRequirements(
+        const std::vector<std::vector<BedpeEntry>>& bedpe_entries,
+        int window_size,
+        int resolution)
+    {
+        size_t need = estimateMemoryUsage(bedpe_entries, window_size, resolution);
+
         struct sysinfo si;
-        if (sysinfo(&si) == 0) {
-            uint64_t total_ram = si.totalram * si.mem_unit;
-            uint64_t available_ram = si.freeram * si.mem_unit;
-            
-            double est_gb = estimated_bytes / (1024.0 * 1024.0 * 1024.0);
-            double total_gb = total_ram / (1024.0 * 1024.0 * 1024.0);
-            double avail_gb = available_ram / (1024.0 * 1024.0 * 1024.0);
-            
-            std::cout << "\nMemory Requirements:\n"
-                      << "Estimated memory needed: " << std::fixed << std::setprecision(2) 
-                      << est_gb << " GB\n"
-                      << "Total system RAM: " << std::setprecision(2) << total_gb << " GB\n"
-                      << "Available RAM: " << std::setprecision(2) << avail_gb << " GB\n\n";
-            
-            if (estimated_bytes > available_ram) {
-                throw std::runtime_error(
-                    "Insufficient memory available. Need " + 
-                    std::to_string(est_gb) + " GB but only " + 
-                    std::to_string(avail_gb) + " GB available"
-                );
-            }
-        } else {
-            std::cerr << "Warning: Could not check system memory. Continuing without verification.\n";
+        if (sysinfo(&si) != 0) {
+            std::cerr << "Warning: sysinfo() failed; skipping memory check.\n";
+            return;
+        }
+
+        // Available ≈ free + buffers + cache
+        uint64_t avail = (si.freeram + si.bufferram + si.sharedram) * si.mem_unit;
+
+        double need_gb  = need  / (1024.0 * 1024 * 1024);
+        double total_gb = si.totalram * si.mem_unit / (1024.0 * 1024 * 1024);
+        double avail_gb = avail / (1024.0 * 1024 * 1024);
+
+        std::cout << "\nMemory Requirements:\n"
+                  << "  Needed:       " << std::fixed << std::setprecision(2) << need_gb  << " GB\n"
+                  << "  Total system: " << std::setprecision(2) << total_gb << " GB\n"
+                  << "  Available:    " << std::setprecision(2) << avail_gb << " GB\n\n";
+
+        if (need > avail) {
+            throw std::runtime_error(
+                "Insufficient memory: need " +
+                std::to_string(need_gb) + " GB but only " +
+                std::to_string(avail_gb) + " GB available"
+            );
         }
     }
 }
