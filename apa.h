@@ -12,7 +12,6 @@
 #include <iostream>
 #include <algorithm>
 #include <map>
-#include <sys/sysinfo.h>
 #include <iomanip>
 #include "apa_matrix.h"
 
@@ -44,92 +43,66 @@ namespace detail {
         return 20000000 / resolution; // Default fallback size
     }
 
-    // Make all function definitions inline
-    inline size_t estimateChromCoverageMemory(const std::string& chrom, int32_t resolution) {
-        auto it = DEFAULT_CHROM_SIZES.find(chrom);
-        if (it != DEFAULT_CHROM_SIZES.end()) {
-            return (it->second / resolution + 1) * 4;  // 4 bytes per float
-        }
-        return 20000000 / resolution * 4; // Default size, 4 bytes per float
-    }
-
-    inline size_t estimateMemoryUsage(
-        const std::vector<std::vector<BedpeEntry>>& bedpe_entries,
-        int window_size,
-        int resolution)
-    {
-        size_t total_bedpes = 0;
-        std::set<std::string> unique_chroms;
-        for (auto const& entries : bedpe_entries) {
-            total_bedpes += entries.size();
-            for (auto const& e : entries) {
-                unique_chroms.insert(e.chrom1);
-                unique_chroms.insert(e.chrom2);
-            }
-        }
-
-        size_t peak = 0, current = 0;
-
-        // 1) LoopInfo: 2×int16_t (2 bytes each) + 2×int32_t (4 bytes each) = 12 bytes per entry
-        current += total_bedpes * 12;  
-
-        // 2) ROI: for each chrom we store two unordered_sets of int32_t (4 bytes each)
-        //    bins = getChromBins(chrom, resolution)
-        size_t roi = 0;
-        for (auto const& chrom : unique_chroms) {
-            size_t bins = getChromBins(chrom, resolution);
-            // rowIndices + colIndices, each bin costs 4 bytes
-            roi += bins * 4 * 2;  
-        }
-        current += roi;
-        peak = std::max(peak, current);
-
-        // 3) APAMatrices: one float-per-cell, float = 4 bytes
-        size_t matrix_w = window_size * 2 + 1;
-        size_t mat_bytes = matrix_w * matrix_w * 4;  
-        current += bedpe_entries.size() * mat_bytes;
-
-        // 4) Coverage: worst-case one float per bin, float = 4 bytes
-        size_t cover = 0;
-        for (auto const& chrom : unique_chroms) {
-            size_t bins = getChromBins(chrom, resolution);
-            cover += bins * 4;
-        }
-        current += cover;
-        peak = std::max(peak, current);
-
-        // 5) Add 5% overhead
-        peak = static_cast<size_t>(peak * 1.05);
-
-        return peak;
+    double estimateMemoryBytes(uint64_t N_loops, uint32_t window_size, uint32_t N_sets) {
+        // Estimate simplified peak memory usage
+        double matrixW = 2.0 * window_size + 1.0;
+        double perSet  = 4.0 * matrixW * matrixW    // APA matrix
+                       + 8.0 * matrixW;             // row+col sums
+        double total   = 12.0 * N_loops             // LoopInfo structs
+                       + perSet * N_sets; 
+        return total * 1.1;                        // +10% overhead
     }
 
     inline void checkMemoryRequirements(
         const std::vector<std::vector<BedpeEntry>>& bedpe_entries,
-        int window_size,
-        int resolution)
+        int window_size)
     {
-        size_t need = estimateMemoryUsage(bedpe_entries, window_size, resolution);
-
-        struct sysinfo si;
-        if (sysinfo(&si) != 0) {
-            std::cerr << "Warning: sysinfo() failed; skipping memory check.\n";
-            return;
+        // Count total loops and sets
+        uint64_t total_loops = 0;
+        for (const auto& entries : bedpe_entries) {
+            total_loops += entries.size();
         }
+        uint32_t num_sets = bedpe_entries.size();
 
-        // Available ≈ free + buffers + cache
-        uint64_t avail = (si.freeram + si.bufferram + si.sharedram) * si.mem_unit;
+        // Calculate memory estimate
+        double need_bytes = estimateMemoryBytes(total_loops, window_size, num_sets);
+        double need_gb = need_bytes / (1024.0 * 1024 * 1024);
 
-        double need_gb  = need  / (1024.0 * 1024 * 1024);
-        double total_gb = si.totalram * si.mem_unit / (1024.0 * 1024 * 1024);
-        double avail_gb = avail / (1024.0 * 1024 * 1024);
+        // Get memory information
+        double total_gb = 0.0;
+        double avail_gb = 0.0;
+
+        // First try SLURM environment variable
+        char* slurm_mem = std::getenv("SLURM_MEM_PER_NODE");
+        if (slurm_mem != nullptr) {
+            // SLURM_MEM_PER_NODE is in MB
+            total_gb = std::stod(slurm_mem) / 1024.0;
+            avail_gb = total_gb;  // On SLURM, we get the full node memory
+        } else {
+            // Try sysinfo() for non-SLURM environments
+            #ifdef __linux__
+            struct sysinfo si;
+            if (sysinfo(&si) == 0) {
+                total_gb = (si.totalram * si.mem_unit) / (1024.0 * 1024 * 1024);
+                avail_gb = ((si.freeram + si.bufferram) * si.mem_unit) / (1024.0 * 1024 * 1024);
+            } else {
+                // Fallback to conservative estimate if sysinfo fails
+                total_gb = 16.0;
+                avail_gb = 14.0;
+            }
+            #else
+            // Non-Linux systems get conservative estimate
+            total_gb = 16.0;
+            avail_gb = 14.0;
+            #endif
+        }
 
         std::cout << "\nMemory Requirements:\n"
                   << "  Needed:       " << std::fixed << std::setprecision(2) << need_gb  << " GB\n"
                   << "  Total system: " << std::setprecision(2) << total_gb << " GB\n"
                   << "  Available:    " << std::setprecision(2) << avail_gb << " GB\n\n";
 
-        if (need > avail) {
+        if (need_gb > avail_gb) {
             throw std::runtime_error(
                 "Insufficient memory: need " +
                 std::to_string(need_gb) + " GB but only " +
