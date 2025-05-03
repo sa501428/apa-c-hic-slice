@@ -178,14 +178,21 @@ struct RegionsOfInterest {
     int32_t window;
     bool isInter;
 
-    RegionsOfInterest(const std::vector<BedpeEntry>& bedpe_entries, 
-                     int32_t res, int32_t win,
-                     bool inter) 
-        : resolution(res), window(win), isInter(inter) {
-        // Pre-reserve space for better performance
-        for (const auto& entry : bedpe_entries) {
-            rowIndices[entry.chrom1].reserve(detail::getChromBins(entry.chrom1, resolution));
-            colIndices[entry.chrom2].reserve(detail::getChromBins(entry.chrom2, resolution));
+    RegionsOfInterest(int32_t res, int32_t win, bool inter) 
+        : resolution(res), window(win), isInter(inter) {}
+
+    void clear() {
+        rowIndices.clear();
+        colIndices.clear();
+    }
+
+    void addEntries(const std::vector<BedpeEntry>& bedpe_entries) {
+        // Pre-reserve space for better performance if this is the first addition
+        if (rowIndices.empty()) {
+            for (const auto& entry : bedpe_entries) {
+                rowIndices[entry.chrom1].reserve(detail::getChromBins(entry.chrom1, resolution));
+                colIndices[entry.chrom2].reserve(detail::getChromBins(entry.chrom2, resolution));
+            }
         }
 
         for (const auto& entry : bedpe_entries) {
@@ -194,10 +201,10 @@ struct RegionsOfInterest {
             int32_t centerY = entry.gmid2 / resolution;
             
             // Add all possible bins within window of the loop center
-            for (int32_t bin = centerX - win; bin <= centerX + win; bin++) {
+            for (int32_t bin = centerX - window; bin <= centerX + window; bin++) {
                 if (bin >= 0) rowIndices[entry.chrom1].insert(bin);
             }
-            for (int32_t bin = centerY - win; bin <= centerY + win; bin++) {
+            for (int32_t bin = centerY - window; bin <= centerY + window; bin++) {
                 if (bin >= 0) colIndices[entry.chrom2].insert(bin);
             }
         }

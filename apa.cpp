@@ -140,14 +140,19 @@ std::vector<APAMatrix> processSliceFile(
             std::cout << "Read chromosome: " << chromosomeName << " (key=" << key << ")" << std::endl;
         }
 
-        // Now create data structures with the chromosome mapping available
-        std::vector<RegionsOfInterest> all_roi;
+        // Create a single RegionsOfInterest for all BEDPE sets
+        RegionsOfInterest roi(resolution, window_size, isInter);
+        
+        // Add regions from all BEDPE sets to the single ROI
+        for (const auto& entries : all_bedpe_entries) {
+            roi.addEntries(entries);
+        }
+
+        // Create loop indices for each BEDPE set
         std::vector<LoopIndex> all_indices;
-        all_roi.reserve(all_bedpe_entries.size());
         all_indices.reserve(all_bedpe_entries.size());
 
         for (const auto& entries : all_bedpe_entries) {
-            all_roi.emplace_back(entries, resolution, window_size, isInter);
             all_indices.emplace_back(entries, resolution, chromNameToKey);
         }
 
@@ -156,14 +161,13 @@ std::vector<APAMatrix> processSliceFile(
         all_bedpe_entries.shrink_to_fit();
 
         // Create vectors to hold per-bedpe data structures
-        size_t num_bedpes = all_roi.size();
+        size_t num_bedpes = all_indices.size();
         std::vector<APAMatrix> all_matrices;
         std::vector<std::vector<float>> all_rowSums(num_bedpes);
         std::vector<std::vector<float>> all_colSums(num_bedpes);
 
         // Initialize data structures for each BEDPE set
         all_matrices.reserve(num_bedpes);
-
         for (size_t i = 0; i < num_bedpes; i++) {
             all_matrices.push_back(APAMatrix(window_size * 2 + 1));
             all_rowSums[i].resize(window_size * 2 + 1, 0.0f);
@@ -231,9 +235,10 @@ std::vector<APAMatrix> processSliceFile(
                 }
             }
 
-            // Process for each BEDPE set
-            for (size_t bedpe_idx = 0; bedpe_idx < all_roi.size(); bedpe_idx++) {
-                if (all_roi[bedpe_idx].probablyContainsRecord(chr1, chr2, record.binX, record.binY)) {
+            // Check against the single ROI
+            if (roi.probablyContainsRecord(chr1, chr2, record.binX, record.binY)) {
+                // Process for each BEDPE set
+                for (size_t bedpe_idx = 0; bedpe_idx < all_indices.size(); bedpe_idx++) {
                     auto nearby_loops = all_indices[bedpe_idx].getNearbyLoops(record.chr1Key, record.chr2Key, record.binX);
                     for (const auto* loop : nearby_loops) {
                         int32_t loopCenterBinX = loop->gmid1 / resolution;
@@ -255,8 +260,7 @@ std::vector<APAMatrix> processSliceFile(
         std::cout << "Finished processing " << contact_count << " contacts" << std::endl;
         
         // Free RegionsOfInterest as it's no longer needed for contact processing
-        all_roi.clear();
-        all_roi.shrink_to_fit();
+        roi.clear();
 
         std::cout << "Calculating coverage normalization..." << std::endl;
         // After processing all contacts, normalize each matrix
