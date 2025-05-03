@@ -5,17 +5,22 @@
 #include <algorithm>
 #include <stdexcept>
 #include <cctype>
+#include <random>
 
 BedpeBuilder::BedpeBuilder(const std::string& forward_bed, 
                           const std::string& reverse_bed,
                           long min_dist,
                           long max_dist,
-                          bool isInter)
+                          bool isInter,
+                          size_t max_entries)
     : forward_bed_file(forward_bed)
     , reverse_bed_file(reverse_bed)
     , min_genome_dist(min_dist)
     , max_genome_dist(max_dist)
-    , isInter(isInter) {}
+    , isInter(isInter)
+    , max_entries(max_entries)
+    , rng(10)  // Initialize with seed 10
+{}
 
 std::map<std::string, std::vector<BedEntry>> BedpeBuilder::loadBedFile(const std::string& filename) {
     std::map<std::string, std::vector<BedEntry>> bed_data;
@@ -124,10 +129,28 @@ std::vector<BedpeEntry> BedpeBuilder::generateInterChromosomal(
     return results;
 }
 
+std::vector<BedpeEntry> BedpeBuilder::subsampleEntries(std::vector<BedpeEntry> entries) {
+    if (max_entries == 0 || entries.size() <= max_entries) {
+        return entries;
+    }
+
+    // Create a random permutation of indices
+    std::vector<size_t> indices(entries.size());
+    std::iota(indices.begin(), indices.end(), 0);
+    std::shuffle(indices.begin(), indices.end(), rng);
+
+    // Take only max_entries elements
+    std::vector<BedpeEntry> subsampled;
+    subsampled.reserve(max_entries);
+    for (size_t i = 0; i < max_entries; ++i) {
+        subsampled.push_back(entries[indices[i]]);
+    }
+
+    return subsampled;
+}
+
 std::vector<BedpeEntry> BedpeBuilder::buildBedpe() {
-    std::cout << "Loading forward BED file: " << forward_bed_file << std::endl;
     auto forward_data = loadBedFile(forward_bed_file);
-    std::cout << "Loading reverse BED file: " << reverse_bed_file << std::endl;
     auto reverse_data = loadBedFile(reverse_bed_file);
     
     std::vector<BedpeEntry> all_results;
@@ -158,12 +181,27 @@ std::vector<BedpeEntry> BedpeBuilder::buildBedpe() {
         }
     }
     
+    // Clear BED data as we don't need it anymore
+    forward_data.clear();
+    forward_data.shrink_to_fit();
+    reverse_data.clear();
+    reverse_data.shrink_to_fit();
+    
     std::cout << "Sorting and removing duplicates..." << std::endl;
     std::sort(all_results.begin(), all_results.end());
     auto last = std::unique(all_results.begin(), all_results.end());
     all_results.erase(last, all_results.end());
 
-    std::cout << "Generated " << all_results.size() << " unique BEDPE entries" << std::endl;
+    size_t original_size = all_results.size();
+    all_results = subsampleEntries(std::move(all_results));
+    
+    if (max_entries > 0 && original_size > max_entries) {
+        std::cout << "Subsampled from " << original_size << " to " << all_results.size() 
+                  << " entries (max: " << max_entries << ")" << std::endl;
+    } else {
+        std::cout << "Generated " << all_results.size() << " unique BEDPE entries" << std::endl;
+    }
+    
     return all_results;
 }
 

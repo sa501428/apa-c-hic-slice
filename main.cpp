@@ -15,7 +15,7 @@
 // output the total counts
 void printUsage() {
     std::cout << "Usage: apa4 <inter|intra> <min_genome_dist> <max_genome_dist> <window_size> "
-              << "<hic_slice_file> [<forward.bed> <reverse.bed> <output.txt>]... [-v|--verbose]\n"
+              << "<hic_slice_file> [<forward.bed> <reverse.bed> <output.txt>]... [-v|--verbose] [-m|--max-entries N]\n"
               << "\tCreate potential loop locations using the anchors\n"
               << "\t\t'inter' for inter-chromosomal features\n"
               << "\t\t'intra' for intra-chromosomal features\n"
@@ -24,7 +24,8 @@ void printUsage() {
               << "\t\t<window_size> window size around loop\n"
               << "\t\t<hic_slice_file> path to the HiC slice file\n"
               << "\t\t<forward.bed> <reverse.bed> <output.txt> triplets (can have multiple)\n"
-              << "\t\t-v, --verbose: enable verbose output\n";
+              << "\t\t-v, --verbose: enable verbose output\n"
+              << "\t\t-m, --max-entries N: maximum number of BEDPE entries per set (default: no limit)\n";
 }
 
 bool fileExists(const std::string& filename) {
@@ -55,13 +56,20 @@ int main(int argc, char* argv[]) {
         std::uniform_int_distribution<long> dis(0, std::numeric_limits<long>::max());
         long job_id = dis(gen);
         
-        // Check for verbose flag
+        // Check for verbose flag and max entries
         bool verbose = false;
+        size_t max_entries = 0;
         std::vector<std::string> args;
         for (int i = 1; i < argc; i++) {
             std::string arg = argv[i];
             if (arg == "-v" || arg == "--verbose") {
                 verbose = true;
+            } else if (arg == "-m" || arg == "--max-entries") {
+                if (i + 1 < argc) {
+                    max_entries = std::stoul(argv[++i]);
+                } else {
+                    throw std::runtime_error("--max-entries requires a value");
+                }
             } else {
                 args.push_back(arg);
             }
@@ -133,7 +141,7 @@ int main(int argc, char* argv[]) {
         for (size_t i = 0; i < bedpe_sets.size(); i++) {
             const auto& set = bedpe_sets[i];
             if (verbose) std::cout << "Loading BED files: " << set.forward_bed << " and " << set.reverse_bed << std::endl;
-            BedpeBuilder builder(set.forward_bed, set.reverse_bed, min_dist, max_dist, isInter);
+            BedpeBuilder builder(set.forward_bed, set.reverse_bed, min_dist, max_dist, isInter, max_entries);
             all_bedpe_entries[i] = builder.buildBedpe();
         }
         
