@@ -221,9 +221,9 @@ std::vector<APAMatrix> processSliceFile(
             std::string chr2 = chromosomeKeyToName[record.chr2Key];
             
             if (roi.probablyContainsPartialRecord(chr1, chr2, record.binX, record.binY)) {
-                coverage.add(record.chr1Key, chr1, record.binX, record.value);
+                coverage.add(record.chr1Key, record.binX, record.value);
                 if (record.chr1Key != record.chr2Key || record.binX != record.binY) {  // Don't double count diagonal
-                    coverage.add(record.chr2Key, chr2, record.binY, record.value);
+                    coverage.add(record.chr2Key, record.binY, record.value);
                 }
             }
 
