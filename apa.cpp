@@ -153,7 +153,7 @@ std::vector<APAMatrix> processSliceFile(
         all_indices.reserve(all_bedpe_entries.size());
 
         for (const auto& entries : all_bedpe_entries) {
-            all_indices.emplace_back(entries, resolution, chromNameToKey);
+            all_indices.emplace_back(entries, resolution, chromNameToKey, window_size);
         }
 
         // Clear original BedpeEntries as they're no longer needed
@@ -239,7 +239,8 @@ std::vector<APAMatrix> processSliceFile(
             if (roi.probablyContainsRecord(chr1, chr2, record.binX, record.binY)) {
                 // Process for each BEDPE set
                 for (size_t bedpe_idx = 0; bedpe_idx < all_indices.size(); bedpe_idx++) {
-                    auto nearby_loops = all_indices[bedpe_idx].getNearbyLoops(record.chr1Key, record.chr2Key, record.binX);
+                    auto nearby_loops = all_indices[bedpe_idx].getNearbyLoops(record.chr1Key, record.chr2Key, 
+                                                                           record.binX, record.binY);
                     for (const auto* loop : nearby_loops) {
                         int32_t loopCenterBinX = loop->gmid1 / resolution;
                         int32_t loopCenterBinY = loop->gmid2 / resolution;

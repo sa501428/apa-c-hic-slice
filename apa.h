@@ -224,40 +224,48 @@ struct RegionsOfInterest {
 };
 
 struct LoopIndex {
-    static const int32_t BIN_GROUP_SIZE = 1000;
-    std::map<ChromPair, std::map<int32_t, std::vector<LoopInfo>>> loops;
+    const int32_t BIN_GROUP_SIZE;
+    // Map of (chrom1,chrom2) -> (binX,binY) -> loops
+    std::map<ChromPair, std::map<std::pair<int32_t, int32_t>, std::vector<LoopInfo>>> loops;
     int32_t resolution;
     
     LoopIndex(const std::vector<BedpeEntry>& bedpe_entries, 
               int32_t res,
-              const std::map<std::string, int16_t>& chromNameToKey) 
-        : resolution(res) {
+              const std::map<std::string, int16_t>& chromNameToKey,
+              int32_t window_size) 
+        : BIN_GROUP_SIZE(3 * window_size), resolution(res) {
         for (const auto& loop : bedpe_entries) {
             ChromPair chrom_pair{
                 chromNameToKey.at(loop.chrom1),
                 chromNameToKey.at(loop.chrom2)
             };
-            int32_t mid_bin = loop.gmid1 / resolution;
-            int32_t bin_group = mid_bin / BIN_GROUP_SIZE;
-            loops[chrom_pair][bin_group].emplace_back(loop, chromNameToKey);
+            int32_t binX = loop.gmid1 / resolution;
+            int32_t binY = loop.gmid2 / resolution;
+            int32_t bin_group_x = binX / BIN_GROUP_SIZE;
+            int32_t bin_group_y = binY / BIN_GROUP_SIZE;
+            loops[chrom_pair][{bin_group_x, bin_group_y}].emplace_back(loop, chromNameToKey);
         }
     }
     
     std::vector<const LoopInfo*> getNearbyLoops(int16_t chr1Key, int16_t chr2Key, 
-                                               int32_t binX) const {
+                                               int32_t binX, int32_t binY) const {
         ChromPair chrom_pair{chr1Key, chr2Key};
         auto chrom_it = loops.find(chrom_pair);
         if (chrom_it == loops.end()) return {};
         
-        int32_t bin_group = binX / BIN_GROUP_SIZE;
+        int32_t bin_group_x = binX / BIN_GROUP_SIZE;
+        int32_t bin_group_y = binY / BIN_GROUP_SIZE;
         std::vector<const LoopInfo*> nearby_loops;
         nearby_loops.reserve(10);
         
+        // Check 3x3 grid of bin groups around the target
         for (int32_t i = -1; i <= 1; i++) {
-            auto group_it = chrom_it->second.find(bin_group + i);
-            if (group_it != chrom_it->second.end()) {
-                for (const auto& loop : group_it->second) {
-                    nearby_loops.push_back(&loop);
+            for (int32_t j = -1; j <= 1; j++) {
+                auto group_it = chrom_it->second.find({bin_group_x + i, bin_group_y + j});
+                if (group_it != chrom_it->second.end()) {
+                    for (const auto& loop : group_it->second) {
+                        nearby_loops.push_back(&loop);
+                    }
                 }
             }
         }
