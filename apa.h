@@ -15,6 +15,10 @@
 #include <iomanip>
 #include "apa_matrix.h"
 
+#ifdef __linux__
+#include <sys/sysinfo.h>
+#endif
+
 // Forward declarations
 struct RegionsOfInterest;
 struct LoopIndex;
