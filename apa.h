@@ -103,6 +103,18 @@ namespace detail {
             #endif
         }
 
+        if (verbose) {
+            std::cout << "\nDetailed Memory Analysis:\n"
+                      << "  Total loops:     " << total_loops << "\n"
+                      << "  Number of sets:  " << num_sets << "\n"
+                      << "  Window size:     " << window_size << "\n"
+                      << "  Memory per loop: " << std::fixed << std::setprecision(2) 
+                      << (12.0 * 1.1) << " bytes\n"
+                      << "  Memory per set:  " << std::setprecision(2)
+                      << ((4.0 * (2.0 * window_size + 1.0) * (2.0 * window_size + 1.0) + 
+                           8.0 * (2.0 * window_size + 1.0)) * 1.1) << " bytes\n";
+        }
+
         std::cout << "\nMemory Requirements:\n"
                   << "  Needed:       " << std::fixed << std::setprecision(2) << need_gb  << " GB\n"
                   << "  Total system: " << std::setprecision(2) << total_gb << " GB\n"
