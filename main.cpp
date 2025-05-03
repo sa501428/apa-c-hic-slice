@@ -39,15 +39,6 @@ struct BedpeSet {
     std::string output_file;
 };
 
-// Helper function to print timestamp with ID
-void printTimestamp(const std::string& message, long id, bool verbose) {
-    if (verbose) {
-        auto now = std::chrono::system_clock::now();
-        auto time = std::chrono::system_clock::to_time_t(now);
-        std::cout << message << " [ID: " << id << "] (" << std::ctime(&time) << ")" << std::endl;
-    }
-}
-
 int main(int argc, char* argv[]) {
     try {
         // Generate random ID at start
