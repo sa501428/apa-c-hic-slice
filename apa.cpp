@@ -294,6 +294,18 @@ std::vector<APAMatrix> processSliceFile(
             all_matrices[bedpe_idx].normalize(all_rowSums[bedpe_idx], all_colSums[bedpe_idx]);
         }
 
+        // Free data structures that are no longer needed after normalization
+        all_indices.clear();  // Moved here - after normalization is complete
+        all_indices.shrink_to_fit();
+        all_rowSums.clear();
+        all_rowSums.shrink_to_fit();
+        all_colSums.clear();
+        all_colSums.shrink_to_fit();
+        coverage.vectors.clear();
+
+        chromosomeKeyToName.clear();
+        chromNameToKey.clear();
+
         if (is_compressed) {
             gzclose(gz_file);
         } else {

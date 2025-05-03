@@ -146,9 +146,11 @@ std::vector<BedpeEntry> BedpeBuilder::subsampleEntries(std::vector<BedpeEntry> e
         subsampled.push_back(std::move(entries[indices[i]]));  // Use move to avoid copying
     }
     
-    // Clear the original entries
+    // Clear the original entries and temporary vectors
     entries.clear();
     entries.shrink_to_fit();
+    indices.clear();
+    indices.shrink_to_fit();
 
     return subsampled;
 }
