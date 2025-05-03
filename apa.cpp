@@ -18,12 +18,14 @@ std::vector<APAMatrix> processSliceFile(
     int window_size,
     bool isInter,
     long min_genome_dist,
-    long max_genome_dist) {
+    long max_genome_dist,
+    long job_id,
+    bool verbose) {
     
     // Make a copy we can modify
     auto all_bedpe_entries = all_bedpe_entries_const;
     
-    std::cout << "Opening slice file..." << std::endl;
+    if (verbose) std::cout << "Opening slice file..." << std::endl;
     if (window_size <= 0) {
         throw std::runtime_error("Window size must be positive");
     }
@@ -46,7 +48,7 @@ std::vector<APAMatrix> processSliceFile(
         is_compressed = true;
     }
 
-    std::cout << "File opened..." << std::endl;
+    if (verbose) std::cout << "File opened..." << std::endl;
 
     try {
         // Read and verify magic string
@@ -77,10 +79,10 @@ std::vector<APAMatrix> processSliceFile(
             throw std::runtime_error("Invalid resolution in slice file");
         }
 
-        std::cout << "Resolution is " << resolution << std::endl;
+        if (verbose) std::cout << "Resolution is " << resolution << std::endl;
 
         // Perform memory check now that we have the resolution
-        detail::checkMemoryRequirements(all_bedpe_entries, window_size);
+        detail::checkMemoryRequirements(all_bedpe_entries, window_size, verbose);
 
         // Move chromosome mapping read to here, before creating data structures
         int32_t numChromosomes;
@@ -98,7 +100,7 @@ std::vector<APAMatrix> processSliceFile(
             throw std::runtime_error("Invalid number of chromosomes in slice file");
         }
 
-        std::cout << "Number of chromosomes: " << numChromosomes << std::endl;
+        if (verbose) std::cout << "Number of chromosomes: " << numChromosomes << std::endl;
 
         for (int i = 0; i < numChromosomes; i++) {
             int32_t nameLength;
@@ -137,7 +139,7 @@ std::vector<APAMatrix> processSliceFile(
 
             chromosomeKeyToName[key] = chromosomeName;
             chromNameToKey[chromosomeName] = key;
-            std::cout << "Read chromosome: " << chromosomeName << " (key=" << key << ")" << std::endl;
+            if (verbose) std::cout << "Read chromosome: " << chromosomeName << " (key=" << key << ")" << std::endl;
         }
 
         // Create a single RegionsOfInterest for all BEDPE sets
@@ -174,7 +176,7 @@ std::vector<APAMatrix> processSliceFile(
             all_colSums[i].resize(window_size * 2 + 1, 0.0f);
         }
 
-        std::cout << "Data structures initialized..." << std::endl;
+        if (verbose) std::cout << "Data structures initialized..." << std::endl;
 
         // Create single coverage vectors instance (shared across all BEDPEs)
         CoverageVectors coverage(resolution);
@@ -190,6 +192,7 @@ std::vector<APAMatrix> processSliceFile(
 
         std::cout << "Processing contacts..." << std::endl;
         int64_t contact_count = 0;
+        int64_t next_checkpoint = 10;  // Start with 10 contacts
 
         int32_t max_genome_dist_as_bin = (max_genome_dist / resolution) + (3 * window_size);
         int32_t min_genome_dist_as_bin = (min_genome_dist / resolution) - (3 * window_size);
@@ -200,8 +203,14 @@ std::vector<APAMatrix> processSliceFile(
                 (fread(&record, record_size, 1, raw_file) == 1))) {
             contact_count++;
             
+            // Check if we've hit a checkpoint
+            if (contact_count == next_checkpoint) {
+                printTimestamp("PROCESSED " + std::to_string(contact_count) + " CONTACTS", job_id, true);
+                next_checkpoint *= 10;  // Next checkpoint is 10x more contacts
+            }
+
             // Print first two records for debugging
-            if (contact_count <= 2) {
+            if (verbose && contact_count <= 2) {
                 std::string chr1 = chromosomeKeyToName[record.chr1Key];
                 std::string chr2 = chromosomeKeyToName[record.chr2Key];
                 std::cout << "Contact " << contact_count << ": " 
@@ -256,14 +265,14 @@ std::vector<APAMatrix> processSliceFile(
                 }
             }
         }
-        std::cout << std::endl;
+        if (verbose) std::cout << std::endl;
 
-        std::cout << "Finished processing " << contact_count << " contacts" << std::endl;
+        if (verbose) std::cout << "Finished processing " << contact_count << " contacts" << std::endl;
         
         // Free RegionsOfInterest as it's no longer needed for contact processing
         roi.clear();
 
-        std::cout << "Calculating coverage normalization..." << std::endl;
+        if (verbose) std::cout << "Calculating coverage normalization..." << std::endl;
         // After processing all contacts, normalize each matrix
         for (size_t bedpe_idx = 0; bedpe_idx < all_matrices.size(); bedpe_idx++) {
             // Calculate row and column sums for this matrix

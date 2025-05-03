@@ -14,6 +14,7 @@
 #include <map>
 #include <iomanip>
 #include "apa_matrix.h"
+#include <chrono>
 
 #ifdef __linux__
 #include <sys/sysinfo.h>
@@ -59,7 +60,8 @@ namespace detail {
 
     inline void checkMemoryRequirements(
         const std::vector<std::vector<BedpeEntry>>& bedpe_entries,
-        int window_size)
+        int window_size,
+        bool verbose = false)
     {
         // Count total loops and sets
         uint64_t total_loops = 0;
@@ -311,6 +313,16 @@ std::vector<APAMatrix> processSliceFile(
     int window_size = 10,
     bool isInter = false,
     long min_genome_dist = 0,
-    long max_genome_dist = 0);
+    long max_genome_dist = 0,
+    long job_id = 0,
+    bool verbose = false);
+
+// Helper function to print timestamp with ID
+inline void printTimestamp(const std::string& message, long id, bool verbose = false) {
+    if (!verbose) return;
+    auto now = std::chrono::system_clock::now();
+    auto time = std::chrono::system_clock::to_time_t(now);
+    std::cout << message << " [ID: " << id << "] (" << std::ctime(&time) << ")" << std::endl;
+}
 
 #endif 
