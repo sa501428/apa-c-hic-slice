@@ -47,7 +47,7 @@ namespace detail {
         return 20000000 / resolution; // Default fallback size
     }
 
-    double estimateMemoryBytes(uint64_t N_loops, uint32_t window_size, uint32_t N_sets) {
+    inline double estimateMemoryBytes(uint64_t N_loops, uint32_t window_size, uint32_t N_sets) {
         // Estimate simplified peak memory usage
         double matrixW = 2.0 * window_size + 1.0;
         double perSet  = 4.0 * matrixW * matrixW    // APA matrix
