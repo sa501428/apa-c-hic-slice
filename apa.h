@@ -221,6 +221,26 @@ struct RegionsOfInterest {
         return rowIt != rowIndices.end() && colIt != colIndices.end() &&
                rowIt->second.count(binX) && colIt->second.count(binY);
     }
+
+    bool probablyContainsPartialRecord(const std::string& chr1, const std::string& chr2,
+                               int32_t binX, int32_t binY) const {
+        // Quick filter for inter/intra
+        if (isInter && chr1 == chr2) return false;
+        if (!isInter && chr1 != chr2) return false;
+        
+        // Check if either bin is in any region of interest
+        auto rowIt = rowIndices.find(chr1);
+        if (rowIt != rowIndices.end() && rowIt->second.count(binX)) {
+            return true;
+        }
+        
+        auto colIt = colIndices.find(chr2);
+        if (colIt != colIndices.end() && colIt->second.count(binY)) {
+            return true;
+        }
+        
+        return false;
+    }
 };
 
 struct LoopIndex {

@@ -220,11 +220,11 @@ std::vector<APAMatrix> processSliceFile(
             std::string chr1 = chromosomeKeyToName[record.chr1Key];
             std::string chr2 = chromosomeKeyToName[record.chr2Key];
             
-
-            // Add to coverage vectors (after inter/intra but before any other filtering)
-            coverage.add(record.chr1Key, chr1, record.binX, record.value);
-            if (record.chr1Key != record.chr2Key || record.binX != record.binY) {  // Don't double count diagonal
-                coverage.add(record.chr2Key, chr2, record.binY, record.value);
+            if (roi.probablyContainsPartialRecord(chr1, chr2, record.binX, record.binY)) {
+                coverage.add(record.chr1Key, chr1, record.binX, record.value);
+                if (record.chr1Key != record.chr2Key || record.binX != record.binY) {  // Don't double count diagonal
+                    coverage.add(record.chr2Key, chr2, record.binY, record.value);
+                }
             }
 
             // For intra-chromosomal analysis, filter by distance from diagonal
