@@ -143,8 +143,12 @@ std::vector<BedpeEntry> BedpeBuilder::subsampleEntries(std::vector<BedpeEntry> e
     std::vector<BedpeEntry> subsampled;
     subsampled.reserve(max_entries);
     for (size_t i = 0; i < max_entries; ++i) {
-        subsampled.push_back(entries[indices[i]]);
+        subsampled.push_back(std::move(entries[indices[i]]));  // Use move to avoid copying
     }
+    
+    // Clear the original entries
+    entries.clear();
+    entries.shrink_to_fit();
 
     return subsampled;
 }
@@ -164,7 +168,9 @@ std::vector<BedpeEntry> BedpeBuilder::buildBedpe() {
                                                           reverse_pair.first,
                                                           forward_pair.second,
                                                           reverse_pair.second);
-                    all_results.insert(all_results.end(), results.begin(), results.end());
+                    all_results.insert(all_results.end(), 
+                                     std::make_move_iterator(results.begin()),
+                                     std::make_move_iterator(results.end()));
                 }
             }
         }
@@ -176,16 +182,16 @@ std::vector<BedpeEntry> BedpeBuilder::buildBedpe() {
                 auto results = generateIntraChromosomal(chrom, 
                                                       forward_pair.second,
                                                       reverse_data[chrom]);
-                all_results.insert(all_results.end(), results.begin(), results.end());
+                all_results.insert(all_results.end(),
+                                 std::make_move_iterator(results.begin()),
+                                 std::make_move_iterator(results.end()));
             }
         }
     }
     
     // Clear BED data as we don't need it anymore
     forward_data.clear();
-    forward_data.shrink_to_fit();
     reverse_data.clear();
-    reverse_data.shrink_to_fit();
     
     std::cout << "Sorting and removing duplicates..." << std::endl;
     std::sort(all_results.begin(), all_results.end());
