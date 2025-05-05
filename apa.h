@@ -294,13 +294,15 @@ struct CoverageVectors {
     CoverageVectors(int32_t res) : resolution(res) {}
     
     void add(int16_t chromKey, int32_t bin, float value) {
-        static const int32_t MAX_VECTOR_SIZE = 30000000;  // 30 million elements
-        if (bin >= MAX_VECTOR_SIZE) {
-            throw std::runtime_error("Bin index exceeds maximum allowed size");
-        }
         // Only store non-zero values
         if (value > 0) {
-            vectors[chromKey][bin] += value;
+            auto& chrom_map = vectors[chromKey];
+            auto it = chrom_map.find(bin);
+            if (it != chrom_map.end()) {
+                it->second += value;
+            } else {
+                chrom_map.emplace(bin, value);
+            }
         }
     }
 

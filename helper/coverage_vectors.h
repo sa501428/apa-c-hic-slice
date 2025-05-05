@@ -19,15 +19,16 @@ public:
     }
 
     // Add a contact value to a given chromosome key and bin index
-    void add(int16_t chrKey, int32_t bin, float value) {
-        if (bin < 0) return;  // ignore negative bins
-        static const int32_t MAX_VECTOR_SIZE = 30000000;  // 30 million elements
-        if (bin >= MAX_VECTOR_SIZE) {
-            throw std::runtime_error("Bin index exceeds maximum allowed size");
-        }
+    void add(int16_t chromKey, int32_t bin, float value) {
         // Only store non-zero values
         if (value > 0) {
-            vectors_[chrKey][bin] += value;
+            auto& chrom_map = vectors_[chromKey];
+            auto it = chrom_map.find(bin);
+            if (it != chrom_map.end()) {
+                it->second += value;
+            } else {
+                chrom_map.emplace(bin, value);
+            }
         }
     }
 
