@@ -105,14 +105,14 @@ void calculateCoverageAndDump(
     // 7 Write out CSV
     std::ofstream ofs(out_csv);
     if (!ofs) throw std::runtime_error("Could not open output: " + out_csv);
-    ofs << "Chromosome,Bin,Coverage\n";
-    for (auto& [chrKey, vec] : coverage.getVectors()) {
+    ofs << "Chromosome\tBin\tCoverage\n";
+    for (auto& [chrKey, sparse_vec] : coverage.getVectors()) {
         auto it = key2name.find(chrKey);
         std::string chrName = (it!=key2name.end() ? it->second : std::to_string(chrKey));
-        for (size_t bin = 0; bin < vec.size(); ++bin) {
-            ofs << chrName << ',' << bin << ',' 
+        for (const auto& [bin, value] : sparse_vec) {
+            ofs << chrName << '\t' << bin << '\t' 
                 << std::fixed << std::setprecision(3) 
-                << vec[bin] << "\n";
+                << value << "\n";
         }
     }
     ofs.close();
