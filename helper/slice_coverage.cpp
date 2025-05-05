@@ -1,4 +1,3 @@
-#include "apa.h"              // for detail::checkMemoryRequirements if you still want a memory guard
 #include <zlib.h>
 #include <stdexcept>
 #include <cstring>
@@ -106,13 +105,13 @@ void calculateCoverageAndDump(
     std::ofstream ofs(out_csv);
     if (!ofs) throw std::runtime_error("Could not open output: " + out_csv);
     ofs << "Chromosome\tBin\tCoverage\n";
-    for (auto& [chrKey, sparse_vec] : coverage.getVectors()) {
-        auto it = key2name.find(chrKey);
-        std::string chrName = (it!=key2name.end() ? it->second : std::to_string(chrKey));
-        for (const auto& [bin, value] : sparse_vec) {
-            ofs << chrName << '\t' << bin << '\t' 
+    for (const auto& chr_pair : coverage.getVectors()) {
+        auto it = key2name.find(chr_pair.first);
+        std::string chrName = (it!=key2name.end() ? it->second : std::to_string(chr_pair.first));
+        for (const auto& bin_pair : chr_pair.second) {
+            ofs << chrName << '\t' << bin_pair.first << '\t' 
                 << std::fixed << std::setprecision(3) 
-                << value << "\n";
+                << bin_pair.second << "\n";
         }
     }
     ofs.close();
