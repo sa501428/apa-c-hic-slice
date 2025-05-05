@@ -15,6 +15,8 @@
 #include <iomanip>
 #include "apa_matrix.h"
 #include <chrono>
+#include <fstream>
+#include <sstream>
 
 #ifdef __linux__
 #include <sys/sysinfo.h>
@@ -286,7 +288,6 @@ struct LoopIndex {
 
 // Structure to hold coverage vectors
 struct CoverageVectors {
-    // Change to sparse representation using unordered_map
     std::unordered_map<int16_t, std::unordered_map<int32_t, float>> vectors;  // chromKey -> (bin -> coverage)
     int32_t resolution;
     
@@ -316,6 +317,30 @@ struct CoverageVectors {
             }
         }
     }
+
+    void readFromTSV(const std::string& filename, const std::map<std::string, int16_t>& chromNameToKey) {
+        std::ifstream file(filename);
+        if (!file.is_open()) {
+            throw std::runtime_error("Could not open coverage file: " + filename);
+        }
+
+        std::string line;
+        while (std::getline(file, line)) {
+            std::stringstream ss(line);
+            std::string chrom;
+            int32_t bin;
+            float value;
+            
+            if (!(ss >> chrom >> bin >> value)) {
+                continue;  // Skip malformed lines
+            }
+
+            auto it = chromNameToKey.find(chrom);
+            if (it != chromNameToKey.end()) {
+                add(it->second, bin, value);
+            }
+        }
+    }
 };
 
 // Update function declaration
@@ -327,7 +352,8 @@ std::vector<APAMatrix> processSliceFile(
     long min_genome_dist = 0,
     long max_genome_dist = 0,
     long job_id = 0,
-    bool verbose = false);
+    bool verbose = false,
+    const std::string& coverage_file = "");
 
 // Helper function to print timestamp with ID
 inline void printTimestamp(const std::string& message, long id, bool verbose = false) {

@@ -20,7 +20,8 @@ std::vector<APAMatrix> processSliceFile(
     long min_genome_dist,
     long max_genome_dist,
     long job_id,
-    bool verbose) {
+    bool verbose,
+    const std::string& coverage_file) {
     
     // Make a copy we can modify
     auto all_bedpe_entries = all_bedpe_entries_const;
@@ -178,8 +179,15 @@ std::vector<APAMatrix> processSliceFile(
 
         if (verbose) std::cout << "Data structures initialized..." << std::endl;
 
+        bool use_coverage = !coverage_file.empty();
+
         // Create single coverage vectors instance (shared across all BEDPEs)
         CoverageVectors coverage(resolution);
+        
+        if (use_coverage) {
+            if (verbose) std::cout << "Reading pre-calculated coverage from: " << coverage_file << std::endl;
+            coverage.readFromTSV(coverage_file, chromNameToKey);
+        }
 
         // Single pass: process contacts for both coverage and APA
         struct {
@@ -229,10 +237,12 @@ std::vector<APAMatrix> processSliceFile(
             std::string chr1 = chromosomeKeyToName[record.chr1Key];
             std::string chr2 = chromosomeKeyToName[record.chr2Key];
             
-            if (roi.probablyContainsPartialRecord(chr1, chr2, record.binX, record.binY)) {
-                coverage.add(record.chr1Key, record.binX, record.value);
-                if (record.chr1Key != record.chr2Key || record.binX != record.binY) {  // Don't double count diagonal
-                    coverage.add(record.chr2Key, record.binY, record.value);
+            if (!use_coverage) {
+                if (roi.probablyContainsPartialRecord(chr1, chr2, record.binX, record.binY)) {
+                    coverage.add(record.chr1Key, record.binX, record.value);
+                    if (record.chr1Key != record.chr2Key || record.binX != record.binY) {  // Don't double count diagonal
+                        coverage.add(record.chr2Key, record.binY, record.value);
+                    }
                 }
             }
 

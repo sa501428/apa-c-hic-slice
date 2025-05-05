@@ -15,7 +15,7 @@
 // output the total counts
 void printUsage() {
     std::cout << "Usage: apa4 <inter|intra> <min_genome_dist> <max_genome_dist> <window_size> "
-              << "<hic_slice_file> [<forward.bed> <reverse.bed> <output.txt>]... [-v|--verbose] [-m|--max-entries N]\n"
+              << "<hic_slice_file> [<forward.bed> <reverse.bed> <output.txt>]... [-v|--verbose] [-m|--max-entries N] [-c|--coverage-file FILE]\n"
               << "\tCreate potential loop locations using the anchors\n"
               << "\t\t'inter' for inter-chromosomal features\n"
               << "\t\t'intra' for intra-chromosomal features\n"
@@ -25,7 +25,8 @@ void printUsage() {
               << "\t\t<hic_slice_file> path to the HiC slice file\n"
               << "\t\t<forward.bed> <reverse.bed> <output.txt> triplets (can have multiple)\n"
               << "\t\t-v, --verbose: enable verbose output\n"
-              << "\t\t-m, --max-entries N: maximum number of BEDPE entries per set (default: no limit)\n";
+              << "\t\t-m, --max-entries N: maximum number of BEDPE entries per set (default: no limit)\n"
+              << "\t\t-c, --coverage-file FILE: use pre-calculated coverage from FILE (optional)\n";
 }
 
 bool fileExists(const std::string& filename) {
@@ -50,6 +51,7 @@ int main(int argc, char* argv[]) {
         // Check for verbose flag and max entries
         bool verbose = false;
         size_t max_entries = 0;
+        std::string coverage_file;
         std::vector<std::string> args;
         for (int i = 1; i < argc; i++) {
             std::string arg = argv[i];
@@ -60,6 +62,15 @@ int main(int argc, char* argv[]) {
                     max_entries = std::stoul(argv[++i]);
                 } else {
                     throw std::runtime_error("--max-entries requires a value");
+                }
+            } else if (arg == "-c" || arg == "--coverage-file") {
+                if (i + 1 < argc) {
+                    coverage_file = argv[++i];
+                    if (!fileExists(coverage_file)) {
+                        throw std::runtime_error("Coverage file not found: " + coverage_file);
+                    }
+                } else {
+                    throw std::runtime_error("--coverage-file requires a value");
                 }
             } else {
                 args.push_back(arg);
@@ -141,7 +152,7 @@ int main(int argc, char* argv[]) {
         if (verbose) std::cout << "Processing slice file: " << slice_file << std::endl;
         auto matrices = processSliceFile(slice_file, all_bedpe_entries, 
                                        window_size, isInter, min_dist, max_dist,
-                                       job_id, verbose);
+                                       job_id, verbose, coverage_file);
 
         // Save all matrices
         for (size_t i = 0; i < matrices.size(); i++) {
