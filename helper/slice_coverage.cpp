@@ -9,6 +9,9 @@
 #include <iomanip>
 #include "coverage_vectors.h"  
 
+// build with:
+// g++ -std=c++11 -o slice_coverage slice_coverage.cpp -lz
+
 void calculateCoverageAndDump(
     const std::string& slice_file,
     const std::string& out_csv,
